@@ -1,0 +1,6 @@
+@FindTime_HostAddress = http://localhost:5223
+
+GET {{FindTime_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
