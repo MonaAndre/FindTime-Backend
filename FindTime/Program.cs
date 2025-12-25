@@ -43,8 +43,16 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.Cookie.HttpOnly = true;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-    options.Cookie.SameSite = SameSiteMode.None;
+    if (builder.Environment.IsDevelopment())
+    {
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+    }
+    else
+    {
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.Cookie.SameSite = SameSiteMode.None;
+    }
     options.Cookie.Name = "FindTime";
     options.ExpireTimeSpan = TimeSpan.FromDays(7);
     options.SlidingExpiration = true;
@@ -62,6 +70,7 @@ builder.Services.ConfigureApplicationCookie(options =>
     };
 });
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IUserService, UserService>();
 
 // Configure CORS
 builder.Services.AddCors(options =>
@@ -86,6 +95,7 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.MapScalarApiReference();
+    Console.WriteLine("dev started");
 }
 
 app.UseHttpsRedirection();

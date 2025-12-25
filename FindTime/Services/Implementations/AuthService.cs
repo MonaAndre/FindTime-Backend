@@ -110,13 +110,16 @@ public class AuthService : IAuthService
         }
     }
 
-    public Task<ServiceResponse<bool>> LogoutAsync(string userId)
+    public async Task<ServiceResponse<bool>> LogoutAsync()
     {
-        throw new NotImplementedException();
-    }
-
-    public Task<ServiceResponse<UserProfileDto>> GetUserProfileAsync(string userId)
-    {
-        throw new NotImplementedException();
+        try
+        {
+            await _signInManager.SignOutAsync();
+            return ServiceResponse<bool>.SuccessResponse(true);
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<bool>.ErrorResponse(e.Message, statusCode: 500);
+        }
     }
 }

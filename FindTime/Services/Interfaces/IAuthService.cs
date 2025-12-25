@@ -7,6 +7,5 @@ public interface IAuthService
 {
     Task<ServiceResponse<AuthResponseDto>> RegisterAsync(RegisterDtoRequest dto);
     Task<ServiceResponse<AuthResponseDto>> LoginAsync(LoginDtoRequest dto);
-    Task<ServiceResponse<bool>> LogoutAsync(string userId);
-    Task<ServiceResponse<UserProfileDto>> GetUserProfileAsync(string userId);
+    Task<ServiceResponse<bool>> LogoutAsync();
 }
