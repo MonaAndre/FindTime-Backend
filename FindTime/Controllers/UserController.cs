@@ -33,10 +33,18 @@ public class UserController : ControllerBase
     }
 
     [HttpPost("update-user")]
-    public async Task<IActionResult> UpdateUserAsync([FromBody] UserDto dto)
+    public async Task<IActionResult> UpdateUser([FromBody] UserDto dto)
     {
         var userId = GetUserId();
         var result = await _userService.UpdateUserAsync(userId, dto);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    [HttpDelete("delete-user")]
+    public async Task<IActionResult> DeleteUser()
+    {
+        var userId = GetUserId();
+        var result = await _userService.DeleteUserAsync(userId);
         return StatusCode(result.StatusCode, result);
     }
 }

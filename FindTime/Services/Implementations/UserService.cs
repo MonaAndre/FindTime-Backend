@@ -11,11 +11,14 @@ namespace FindTime.Services.Implementations;
 public class UserService : IUserService
 {
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly ApplicationDbContext _context;
 
-    public UserService(UserManager<ApplicationUser> userManager, ApplicationDbContext context)
+    public UserService(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager,
+        ApplicationDbContext context)
     {
         _userManager = userManager;
+        _signInManager = signInManager;
         _context = context;
     }
 
@@ -51,7 +54,7 @@ public class UserService : IUserService
         try
         {
             var user = await _userManager.FindByIdAsync(userId);
-            if (user == null)
+            if (user == null || user.IsDeleted)
             {
                 return ServiceResponse<bool>.NotFoundResponse("User not found");
             }
@@ -105,11 +108,47 @@ public class UserService : IUserService
             {
                 return ServiceResponse<bool>.ErrorResponse(result.Errors.First().Description, 500);
             }
+
             return ServiceResponse<bool>.SuccessResponse(true);
         }
         catch (Exception e)
         {
             return ServiceResponse<bool>.ErrorResponse($"Failed to update users information. Error message: {e}", 500);
+        }
+    }
+
+    public async Task<ServiceResponse<bool>> DeleteUserAsync(string userId)
+    {
+        try
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null || user.IsDeleted)
+            {
+                return ServiceResponse<bool>.NotFoundResponse("User not found");
+            }
+            
+            user.IsDeleted = true;
+            user.Email = $"{Guid.NewGuid()}@DELETED.Com";
+            user.NormalizedEmail = user.Email.ToUpper();
+            user.UserName = $"deleted_{Guid.NewGuid():N}";
+            user.NormalizedUserName = user.UserName.ToUpperInvariant();
+            user.PhoneNumber = null;
+            user.FirstName = "Deleted";
+            user.LastName = "User";
+            user.DeletedAt = DateTime.UtcNow;
+            user.IsConfirmed = false;
+            var result = await _userManager.UpdateAsync(user);
+            await _userManager.UpdateSecurityStampAsync(user);
+            await _signInManager.SignOutAsync();
+            if (!result.Succeeded)
+            {
+                return ServiceResponse<bool>.ErrorResponse(result.Errors.First().Description, 500);
+            }
+            return ServiceResponse<bool>.SuccessResponse(result.Succeeded);
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<bool>.ErrorResponse("Failed to delete user", 500);
         }
     }
 
