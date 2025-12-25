@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using FindTime.Common;
 using FindTime.Data;
 using FindTime.DTOs.UserDTOs;
@@ -30,7 +31,6 @@ public class UserService : IUserService
 
             var foundUser = new UserDto
             {
-                UserId = user.Id,
                 FirstName = user.FirstName,
                 LastName = user.LastName,
                 Email = user.Email!,
@@ -45,4 +45,75 @@ public class UserService : IUserService
             return ServiceResponse<UserDto>.ErrorResponse(e.Message, 500);
         }
     }
+
+    public async Task<ServiceResponse<bool>> UpdateUserAsync(string userId, UserDto dto)
+    {
+        try
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+            {
+                return ServiceResponse<bool>.NotFoundResponse("User not found");
+            }
+
+            var existingUser = await _userManager.FindByEmailAsync(dto.Email);
+            if (existingUser != null)
+            {
+                return ServiceResponse<bool>.ErrorResponse("Email already exists");
+            }
+
+            string emailPattern = @"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$";
+            if (string.IsNullOrWhiteSpace(dto.Email) || !Regex.IsMatch(dto.Email, emailPattern))
+            {
+                return ServiceResponse<bool>.ErrorResponse("Email can not be empty and need to be valid");
+            }
+
+            user.Email = dto.Email;
+            if (string.IsNullOrWhiteSpace(dto.FirstName))
+            {
+                return ServiceResponse<bool>.ErrorResponse("First name can not be empty");
+            }
+
+            user.FirstName = dto.FirstName;
+            if (string.IsNullOrWhiteSpace(dto.LastName))
+            {
+                return ServiceResponse<bool>.ErrorResponse("Last name can not be empty");
+            }
+
+            user.LastName = dto.LastName;
+            if (!dto.Birthday.HasValue)
+            {
+                return ServiceResponse<bool>.ErrorResponse("Birthday can not be empty");
+            }
+
+            user.Birthday = dto.Birthday;
+            if (string.IsNullOrWhiteSpace(dto.ProfilePicLink))
+            {
+                return ServiceResponse<bool>.ErrorResponse("Picture link can not be empty");
+            }
+
+            user.ProfilePicLink = dto.ProfilePicLink;
+            string phonePattern = @"^\+?\d[\d\s\-]{6,14}\d$";
+            if (!Regex.IsMatch(dto.PhoneNumber, phonePattern))
+            {
+                return ServiceResponse<bool>.ErrorResponse("Phone can not be empty and need to be valid");
+            }
+
+            user.PhoneNumber = dto.PhoneNumber;
+            var result = await _userManager.UpdateAsync(user);
+            if (!result.Succeeded)
+            {
+                return ServiceResponse<bool>.ErrorResponse(result.Errors.First().Description, 500);
+            }
+            return ServiceResponse<bool>.SuccessResponse(true);
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<bool>.ErrorResponse($"Failed to update users information. Error message: {e}", 500);
+        }
+    }
+
+    // todo kvar för user controller
+    // update user info
+    // delete user
 }

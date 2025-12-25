@@ -167,4 +167,9 @@ public class AuthService : IAuthService
             return ServiceResponse<bool>.ErrorResponse("Failed to change password", 500);
         }
     }
+    
+    // todo för senare när kopplar mejl:
+    // reset password
+    // 2fa
+    // confirm user
 }

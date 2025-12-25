@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using FindTime.DTOs.AuthDTOs;
 using FindTime.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FindTime.Controllers;
@@ -15,13 +16,13 @@ public class AuthController : ControllerBase
     {
         _authService = authService;
     }
-    
+
     private string GetUserId()
     {
         return User.FindFirstValue(ClaimTypes.NameIdentifier) ??
                throw new UnauthorizedAccessException("User not found");
     }
-    
+
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterDtoRequest dto)
     {
@@ -33,7 +34,7 @@ public class AuthController : ControllerBase
         var result = await _authService.RegisterAsync(dto);
         return StatusCode(result.StatusCode, result);
     }
-    
+
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginDtoRequest dto)
     {
@@ -46,6 +47,7 @@ public class AuthController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    [Authorize]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
     {
@@ -53,16 +55,12 @@ public class AuthController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    [Authorize]
     [HttpPost("change-password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequestDto dto)
     {
         var userId = GetUserId();
-        var result = await _authService.ChangePasswordAsync(dto,userId);
+        var result = await _authService.ChangePasswordAsync(dto, userId);
         return StatusCode(result.StatusCode, result);
     }
-    
-    //change password
-    // reset password
-    // 2fa
-    // confirm user
 }

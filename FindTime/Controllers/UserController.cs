@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using FindTime.DTOs.UserDTOs;
 using FindTime.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -23,11 +24,19 @@ public class UserController : ControllerBase
                throw new UnauthorizedAccessException("User not found");
     }
 
-    [HttpGet("userInfo")]
-    public async Task<IActionResult> Get()
+    [HttpGet("get-user")]
+    public async Task<IActionResult> GetUser()
     {
         var userId = GetUserId();
         var result = await _userService.GetUserAsync(userId);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    [HttpPost("update-user")]
+    public async Task<IActionResult> UpdateUserAsync([FromBody] UserDto dto)
+    {
+        var userId = GetUserId();
+        var result = await _userService.UpdateUserAsync(userId, dto);
         return StatusCode(result.StatusCode, result);
     }
 }

@@ -6,4 +6,5 @@ namespace FindTime.Services.Interfaces;
 public interface IUserService
 {
     Task<ServiceResponse<UserDto>> GetUserAsync(string userId);
+    Task<ServiceResponse<bool>> UpdateUserAsync(string userId, UserDto dto);
 }
