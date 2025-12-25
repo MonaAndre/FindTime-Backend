@@ -8,4 +8,5 @@ public interface IAuthService
     Task<ServiceResponse<AuthResponseDto>> RegisterAsync(RegisterDtoRequest dto);
     Task<ServiceResponse<AuthResponseDto>> LoginAsync(LoginDtoRequest dto);
     Task<ServiceResponse<bool>> LogoutAsync();
+    Task<ServiceResponse<bool>> ChangePasswordAsync(ChangePasswordRequestDto dto, string userId);
 }

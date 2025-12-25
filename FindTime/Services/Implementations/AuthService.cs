@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using FindTime.Common;
 using FindTime.Data;
 using FindTime.DTOs.AuthDTOs;
@@ -120,6 +121,50 @@ public class AuthService : IAuthService
         catch (Exception e)
         {
             return ServiceResponse<bool>.ErrorResponse(e.Message, statusCode: 500);
+        }
+    }
+
+    public async Task<ServiceResponse<bool>> ChangePasswordAsync(ChangePasswordRequestDto dto, string userId)
+    {
+        try
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            
+            if (user == null)
+            {
+                return ServiceResponse<bool>.NotFoundResponse("User not found");
+            }
+
+            var isCurrentPasswordValid = await _userManager.CheckPasswordAsync(user, dto.CurrentPassword);
+            if (!isCurrentPasswordValid)
+            {
+                return ServiceResponse<bool>.ErrorResponse("Current password is incorrect",400);
+            }
+            
+            if (dto.NewPassword != dto.ConfirmNewPassword)
+            {
+                return ServiceResponse<bool>.ErrorResponse("New password does not match with confirm new password",
+                    statusCode: 400);
+            }
+            string pattern = @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$";
+            if (!Regex.IsMatch(dto.NewPassword, pattern))
+            {
+                return ServiceResponse<bool>.ErrorResponse("Password need to include minimum 8 characters, 1 big letter, 1 small letter and 1 special character");
+            }
+            var result = await _userManager.ChangePasswordAsync(user, dto.CurrentPassword, dto.NewPassword);
+            
+            if (!result.Succeeded)
+            {
+                return ServiceResponse<bool>.ErrorResponse("Failed to change password, try again later", 500);
+            }
+
+            await _userManager.UpdateSecurityStampAsync(user);
+            await _signInManager.RefreshSignInAsync(user);
+            return ServiceResponse<bool>.SuccessResponse(true);
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<bool>.ErrorResponse("Failed to change password", 500);
         }
     }
 }
