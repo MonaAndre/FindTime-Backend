@@ -12,6 +12,9 @@ public class Group
     [Required]
     [MaxLength(100)]
     public string GroupName { get; set; } = string.Empty;
+    
+    [MaxLength(300)]
+    public string? Description { get; set; }  
 
     [Required]
     public string AdminId { get; set; } = string.Empty;

@@ -151,8 +151,4 @@ public class UserService : IUserService
             return ServiceResponse<bool>.ErrorResponse("Failed to delete user", 500);
         }
     }
-
-    // todo kvar för user controller
-    // update user info
-    // delete user
 }

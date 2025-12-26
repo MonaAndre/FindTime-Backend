@@ -42,6 +42,7 @@ public class AuthService : IAuthService
                 Birthday = dto.Birthday,
                 RegisterDay = DateTime.UtcNow,
                 IsConfirmed = true,
+                EmailConfirmed = true
             };
 
             var result = await _userManager.CreateAsync(newUser, dto.Password);
@@ -129,7 +130,7 @@ public class AuthService : IAuthService
         try
         {
             var user = await _userManager.FindByIdAsync(userId);
-            
+
             if (user == null)
             {
                 return ServiceResponse<bool>.NotFoundResponse("User not found");
@@ -138,21 +139,24 @@ public class AuthService : IAuthService
             var isCurrentPasswordValid = await _userManager.CheckPasswordAsync(user, dto.CurrentPassword);
             if (!isCurrentPasswordValid)
             {
-                return ServiceResponse<bool>.ErrorResponse("Current password is incorrect",400);
+                return ServiceResponse<bool>.ErrorResponse("Current password is incorrect", 400);
             }
-            
+
             if (dto.NewPassword != dto.ConfirmNewPassword)
             {
                 return ServiceResponse<bool>.ErrorResponse("New password does not match with confirm new password",
                     statusCode: 400);
             }
+
             string pattern = @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$";
             if (!Regex.IsMatch(dto.NewPassword, pattern))
             {
-                return ServiceResponse<bool>.ErrorResponse("Password need to include minimum 8 characters, 1 big letter, 1 small letter and 1 special character");
+                return ServiceResponse<bool>.ErrorResponse(
+                    "Password need to include minimum 8 characters, 1 big letter, 1 small letter and 1 special character");
             }
+
             var result = await _userManager.ChangePasswordAsync(user, dto.CurrentPassword, dto.NewPassword);
-            
+
             if (!result.Succeeded)
             {
                 return ServiceResponse<bool>.ErrorResponse("Failed to change password, try again later", 500);
@@ -167,7 +171,7 @@ public class AuthService : IAuthService
             return ServiceResponse<bool>.ErrorResponse("Failed to change password", 500);
         }
     }
-    
+
     // todo för senare när kopplar mejl:
     // reset password
     // 2fa
