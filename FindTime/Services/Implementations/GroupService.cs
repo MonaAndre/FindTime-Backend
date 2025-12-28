@@ -267,39 +267,41 @@ public class GroupService : IGroupService
     {
         try
         {
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null)
-            {
-                return ServiceResponse<bool>.NotFoundResponse("User not found");
-            }
-
-            var isAdmin = await _context.Groups
-                .AnyAsync(adm => adm.AdminId == userId);
-
-            if (!isAdmin)
-            {
-                return ServiceResponse<bool>.ForbiddenResponse("The user is not an admin");
-            }
-
             if (string.IsNullOrWhiteSpace(dto.UserEmail))
             {
-                return ServiceResponse<bool>.ErrorResponse("Email can not be empty");
+                return ServiceResponse<bool>.ErrorResponse("Email cannot be empty");
             }
 
+            var group = await _context.Groups.FindAsync(dto.GroupId);
+            if (group == null || group.IsDeleted)
+            {
+                return ServiceResponse<bool>.ErrorResponse("Group not found");
+            }
+
+            if (group.AdminId != userId)
+            {
+                return ServiceResponse<bool>.ForbiddenResponse("You don't have permission to add member");
+            }
+            
             var newMember = await _userManager.FindByEmailAsync(dto.UserEmail);
             if (newMember == null || newMember.IsDeleted)
             {
                 return ServiceResponse<bool>.NotFoundResponse("User does not exist or was deleted");
             }
-
-            var isMember = await _context.GroupUsers
-                .AnyAsync(member => member.UserId == newMember.Id && member.GroupId == dto.GroupId);
-            if (isMember)
+            var exMember = await _context.GroupUsers
+                .FirstOrDefaultAsync(gu => gu.GroupId == dto.GroupId && gu.UserId == newMember.Id);
+            if (exMember != null)
             {
-                return ServiceResponse<bool>.ErrorResponse(
-                    "User is already a member in this group");
+                if (exMember.IsActive)
+                {
+                    return ServiceResponse<bool>.ErrorResponse("Member already exists in this group");
+                }
+                exMember.IsActive = true;
+                exMember.JoinedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+                return ServiceResponse<bool>.SuccessResponse(true, "Member re-added to the group");
             }
-
+            
             var newUserGroup = new GroupUser
             {
                 UserId = newMember.Id,
@@ -309,7 +311,7 @@ public class GroupService : IGroupService
             };
             await _context.GroupUsers.AddAsync(newUserGroup);
             await _context.SaveChangesAsync();
-            return ServiceResponse<bool>.SuccessResponse(true);
+            return ServiceResponse<bool>.SuccessResponse(true, "Member added to the group");
         }
         catch (Exception e)
         {
