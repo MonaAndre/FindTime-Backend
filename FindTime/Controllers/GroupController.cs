@@ -64,4 +64,12 @@ public class GroupController : ControllerBase
         var result = await _groupService.AddMemberToGroupAsync(dto, userId);
         return StatusCode(result.StatusCode, result);
     }
+
+    [HttpPost("delete-member")]
+    public async Task<IActionResult> DeleteMember(DeleteMemberDtoRequest dto)
+    {
+        var userId = GetUserId();
+        var result = await _groupService.DeleteMember(dto, userId);
+        return StatusCode(result.StatusCode, result);
+    }
 }

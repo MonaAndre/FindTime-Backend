@@ -63,4 +63,5 @@ public class AuthController : ControllerBase
         var result = await _authService.ChangePasswordAsync(dto, userId);
         return StatusCode(result.StatusCode, result);
     }
+    
 }

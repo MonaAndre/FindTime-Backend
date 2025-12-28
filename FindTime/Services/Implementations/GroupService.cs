@@ -1,3 +1,4 @@
+using System.Dynamic;
 using FindTime.Common;
 using FindTime.Data;
 using FindTime.DTOs.GroupDTOs;
@@ -290,6 +291,7 @@ public class GroupService : IGroupService
             {
                 return ServiceResponse<bool>.NotFoundResponse("User does not exist or was deleted");
             }
+
             var isMember = await _context.GroupUsers
                 .AnyAsync(member => member.UserId == newMember.Id && member.GroupId == dto.GroupId);
             if (isMember)
@@ -297,6 +299,7 @@ public class GroupService : IGroupService
                 return ServiceResponse<bool>.ErrorResponse(
                     "User is already a member in this group");
             }
+
             var newUserGroup = new GroupUser
             {
                 UserId = newMember.Id,
@@ -313,9 +316,43 @@ public class GroupService : IGroupService
             return ServiceResponse<bool>.ErrorResponse("Failed to add new member", 500);
         }
     }
+
+    public async Task<ServiceResponse<bool>> DeleteMember(DeleteMemberDtoRequest dto, string userId)
+    {
+        try
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+            {
+                return ServiceResponse<bool>.NotFoundResponse("User not found");
+            }
+
+            var isAdmin = await _context.Groups
+                .AnyAsync(adm => adm.AdminId == userId);
+            if (!isAdmin)
+            {
+                return ServiceResponse<bool>.ForbiddenResponse("The user is not an admin");
+            }
+
+            var userToDelete = await _context.GroupUsers.FirstOrDefaultAsync(gu => gu.UserId == dto.UserId
+                && gu.GroupId == dto.GroupId);
+
+
+            if (userToDelete == null || !userToDelete.IsActive)
+            {
+                return ServiceResponse<bool>.ForbiddenResponse("The user is not a member");
+            }
+
+            userToDelete.IsActive = false;
+            await _context.SaveChangesAsync();
+            return ServiceResponse<bool>.SuccessResponse(true);
+        }
+        catch
+        {
+            return ServiceResponse<bool>.ErrorResponse("Failed to delete member", 500);
+        }
+    }
 }
 
-// delete group
-// update member role
-// delete member
-// add member
+// leave group
+// change admin
