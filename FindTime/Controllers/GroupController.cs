@@ -48,4 +48,12 @@ public class GroupController : ControllerBase
         var result = await _groupService.GetAllGroupsAsync(userId);
         return StatusCode(result.StatusCode, result);
     }
+
+    [HttpGet("get-group/{groupId}")]
+    public async Task<IActionResult> GetGroup(int groupId)
+    {
+        var userId = GetUserId();
+        var result = await _groupService.GetGroupInfoAsync(userId, groupId);
+        return StatusCode(result.StatusCode, result);
+    }
 }

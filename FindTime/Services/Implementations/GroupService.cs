@@ -198,4 +198,75 @@ public class GroupService : IGroupService
             return ServiceResponse<List<GetAllGroupsResponse>>.ErrorResponse("Error getting groups", 500);
         }
     }
+
+    public async Task<ServiceResponse<GroupInfoDtoResponse>> GetGroupInfoAsync(string userId, int groupId)
+    {
+        try
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+            {
+                return ServiceResponse<GroupInfoDtoResponse>.NotFoundResponse("User not found");
+            }
+
+            var member = await _context.GroupUsers
+                .Include(member => member.Group)
+                .ThenInclude(g => g.Admin)
+                .FirstOrDefaultAsync(gu => gu.GroupId == groupId && gu.UserId == userId && gu.IsActive);
+
+            if (member == null)
+            {
+                return ServiceResponse<GroupInfoDtoResponse>.ForbiddenResponse("Not a member of this group");
+            }
+
+            var group = member.Group;
+            if (group.IsDeleted)
+            {
+                return ServiceResponse<GroupInfoDtoResponse>.NotFoundResponse("Group is deleted");
+            }
+
+            var members = await _context.GroupUsers
+                .Include(member => member.User)
+                .Where(gu => gu.GroupId == groupId && gu.IsActive)
+                .Select(gu => new GroupMemberGroupDto
+                {
+                    UserId = gu.UserId,
+                    Email = gu.User.Email!,
+                    FirstName = gu.User.FirstName,
+                    LastName = gu.User.LastName,
+                    JoinedAt = gu.JoinedAt,
+                    ProfilePictureLink = gu.User.ProfilePicLink,
+                    IsAdmin = gu.UserId == user.Id
+
+                })
+                .OrderByDescending(m => m.IsAdmin)
+                .ThenBy(m => m.FirstName)
+                .ToListAsync();
+            var groupInfo = new GroupInfoDtoResponse
+            {
+                GroupId = group.GroupId,
+                GroupName = group.GroupName,
+                Description = group.Description,
+                AdminEmail = group.Admin.Email!,
+                Members = members,
+                IsAdmin = group.AdminId == user.Id,
+                CreatedAt = group.CreatedAt,
+                JoinedAt = member.JoinedAt,
+                AdminName = group.Admin.FirstName,
+                MemberCount = members.Count
+            };
+            return ServiceResponse<GroupInfoDtoResponse>.SuccessResponse(groupInfo);
+
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<GroupInfoDtoResponse>.ErrorResponse("Failed to get group info", 500);
+        }
+    }
+
+
 }
+// delete group
+// update member role
+// delete member
+// add member
