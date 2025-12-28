@@ -7,4 +7,7 @@ public interface IGroupService
 {
     Task<ServiceResponse<CreateGroupDtoResponse>> CreateGroupAsync(CreateGroupDtoRequest dto,
         string userId);
+
+    Task<ServiceResponse<bool>> UpdateGroupInfoAsync(UpdateGroupInfoDtoRequest dto, string userId);
+    Task<ServiceResponse<List<GetAllGroupsResponse>>> GetAllGroupsAsync(string userId);
 }
