@@ -56,4 +56,12 @@ public class GroupController : ControllerBase
         var result = await _groupService.GetGroupInfoAsync(userId, groupId);
         return StatusCode(result.StatusCode, result);
     }
+
+    [HttpPost("add-new-member")]
+    public async Task<IActionResult> AddMemberToGroup(AddMemberToGroupDtoRequest dto)
+    {
+        var userId = GetUserId();
+        var result = await _groupService.AddMemberToGroupAsync(dto, userId);
+        return StatusCode(result.StatusCode, result);
+    }
 }
