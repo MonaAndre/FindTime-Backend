@@ -413,7 +413,44 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
             return ServiceResponse<bool>.ErrorResponse($"Failed to leave group:{e}", 500);
         }
     }
-    
-    
+
+    public async Task<ServiceResponse<bool>> DeleteGroupAsync(int groupId, string userId)
+    {
+        try
+        {
+            var (isValidUser, errorResponseUser, user) = await userManager.ValidateUserAsync<bool>(userId);
+            if (!isValidUser || user == null)
+            {
+                return errorResponseUser!;
+            }
+
+            var currentGroup = await context.Groups.FindAsync(groupId);
+            if (currentGroup == null || currentGroup.IsDeleted)
+            {
+                return ServiceResponse<bool>.NotFoundResponse("Group not found");
+            }
+
+            var (isValidGroupMember, errorResponseGroupMember, member) =
+                await context.ValidateGroupMemberAsync<bool>(groupId, userId);
+            if (!isValidGroupMember|| member == null)
+            {
+                return ServiceResponse<bool>.NotFoundResponse("Group not found");
+            }
+
+            var (isValidAdmin, errorResponseAdmin) =
+                await context.ValidateUserIsGroupAdminAsync<bool>(groupId, userId);
+            if (!isValidAdmin)
+            {
+                return errorResponseAdmin!;
+            }
+
+            currentGroup!.IsDeleted = true;
+            await context.SaveChangesAsync();
+            return ServiceResponse<bool>.SuccessResponse(true);
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<bool>.ErrorResponse($"Failed to delete group:{e}", 500);
+        }
+    }
 }
-// för admin delete group hela group och eventer tas bort members ser inte längre den group som active
