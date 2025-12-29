@@ -2,6 +2,7 @@ using System.Dynamic;
 using FindTime.Common;
 using FindTime.Data;
 using FindTime.DTOs.GroupDTOs;
+using FindTime.Extensions;
 using FindTime.Models;
 using FindTime.Services.Interfaces;
 using Microsoft.AspNetCore.Identity;
@@ -20,6 +21,7 @@ public class GroupService : IGroupService
         _userManager = userManager;
     }
 
+
     public async Task<ServiceResponse<CreateGroupDtoResponse>> CreateGroupAsync(CreateGroupDtoRequest dto,
         string userId)
     {
@@ -30,11 +32,8 @@ public class GroupService : IGroupService
                 return ServiceResponse<CreateGroupDtoResponse>.ErrorResponse("Group name is required.");
             }
 
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null)
-            {
-                return ServiceResponse<CreateGroupDtoResponse>.NotFoundResponse("User not found");
-            }
+            var (isValidUser, errorUser, user) = await _userManager.ValidateUserAsync<CreateGroupDtoResponse>(userId);
+            if (!isValidUser) return errorUser!;
 
             var newGroup = new Group
             {
@@ -142,13 +141,10 @@ public class GroupService : IGroupService
                     : ServiceResponse<bool>.NotFoundResponse("Group not found");
             }
 
-            var isMember = await _context.GroupUsers
-                .AnyAsync(member => member.UserId == userId && member.GroupId == group.GroupId);
-            if (!isMember)
-            {
-                return ServiceResponse<bool>.NotFoundResponse(
-                    "User does not have access to change this group information");
-            }
+            var (isValidMember, errorResponseMember, member) =
+                await _context.ValidateGroupMemberAsync<bool>(dto.GroupId, userId);
+            if (!isValidMember) return errorResponseMember!;
+
 
             group.GroupName = dto.GroupName;
             group.Description = dto.Description;
@@ -165,11 +161,10 @@ public class GroupService : IGroupService
     {
         try
         {
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null)
-            {
-                return ServiceResponse<List<GetAllGroupsResponse>>.NotFoundResponse("User not found");
-            }
+            var (isValidUser, errorResponseUser, user) =
+                await _userManager.ValidateUserAsync<List<GetAllGroupsResponse>>(userId);
+            if (!isValidUser)
+                return errorResponseUser!;
 
             var userGroups = await _context.GroupUsers
                 .Include(member => member.Group)
@@ -204,11 +199,9 @@ public class GroupService : IGroupService
     {
         try
         {
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null)
-            {
-                return ServiceResponse<GroupInfoDtoResponse>.NotFoundResponse("User not found");
-            }
+            var (isValidUser, errorResponseUser, user) =
+                await _userManager.ValidateUserAsync<GroupInfoDtoResponse>(userId);
+            if (!isValidUser) return errorResponseUser!;
 
             var member = await _context.GroupUsers
                 .Include(member => member.Group)
@@ -278,16 +271,19 @@ public class GroupService : IGroupService
                 return ServiceResponse<bool>.ErrorResponse("Group not found");
             }
 
-            if (group.AdminId != userId)
+            var (isValidAdmin, errorResponseAdmin) =
+                await _context.ValidateUserIsGroupAdminAsync<bool>(dto.GroupId, userId);
+            if (!isValidAdmin)
             {
-                return ServiceResponse<bool>.ForbiddenResponse("You don't have permission to add member");
+                return errorResponseAdmin!;
             }
-            
+
             var newMember = await _userManager.FindByEmailAsync(dto.UserEmail);
             if (newMember == null || newMember.IsDeleted)
             {
                 return ServiceResponse<bool>.NotFoundResponse("User does not exist or was deleted");
             }
+
             var exMember = await _context.GroupUsers
                 .FirstOrDefaultAsync(gu => gu.GroupId == dto.GroupId && gu.UserId == newMember.Id);
             if (exMember != null)
@@ -296,12 +292,13 @@ public class GroupService : IGroupService
                 {
                     return ServiceResponse<bool>.ErrorResponse("Member already exists in this group");
                 }
+
                 exMember.IsActive = true;
                 exMember.JoinedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
                 return ServiceResponse<bool>.SuccessResponse(true, "Member re-added to the group");
             }
-            
+
             var newUserGroup = new GroupUser
             {
                 UserId = newMember.Id,
@@ -319,33 +316,31 @@ public class GroupService : IGroupService
         }
     }
 
-    public async Task<ServiceResponse<bool>> DeleteMember(DeleteMemberDtoRequest dto, string userId)
+    public async Task<ServiceResponse<bool>> DeleteMemberAsync(DeleteMemberDtoRequest dto, string userId)
     {
         try
         {
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null)
+            var (isValidUser, errorResponseUser, user) = await _userManager.ValidateUserAsync<bool>(userId);
+            if (!isValidUser)
             {
-                return ServiceResponse<bool>.NotFoundResponse("User not found");
+                return errorResponseUser!;
             }
 
-            var isAdmin = await _context.Groups
-                .AnyAsync(adm => adm.AdminId == userId);
-            if (!isAdmin)
+            var (isValidAdmin, errorResponseAdmin) =
+                await _context.ValidateUserIsGroupAdminAsync<bool>(dto.GroupId, userId);
+            if (!isValidAdmin)
             {
-                return ServiceResponse<bool>.ForbiddenResponse("The user is not an admin");
+                return errorResponseAdmin!;
             }
 
-            var userToDelete = await _context.GroupUsers.FirstOrDefaultAsync(gu => gu.UserId == dto.UserId
-                && gu.GroupId == dto.GroupId);
-
-
-            if (userToDelete == null || !userToDelete.IsActive)
+            var (isValidGroupMember, errorResponseGroup, userToDelete) =
+                await _context.ValidateGroupMemberAsync<bool>(dto.GroupId, dto.UserId);
+            if (!isValidGroupMember)
             {
-                return ServiceResponse<bool>.ForbiddenResponse("The user is not a member");
+                return errorResponseGroup!;
             }
 
-            userToDelete.IsActive = false;
+            userToDelete!.IsActive = false;
             await _context.SaveChangesAsync();
             return ServiceResponse<bool>.SuccessResponse(true);
         }
@@ -354,7 +349,48 @@ public class GroupService : IGroupService
             return ServiceResponse<bool>.ErrorResponse("Failed to delete member", 500);
         }
     }
+
+    public async Task<ServiceResponse<bool>> ChangeAdminAsync(ChangeAdminDtoRequest dto, string userId)
+    {
+        try
+        {
+            var (isValidUser, errorResponseUser, user) = await _userManager.ValidateUserAsync<bool>(userId);
+            if (!isValidUser)
+            {
+                return errorResponseUser!;
+            }
+
+            var (isValidAdmin, errorResponseAdmin) =
+                await _context.ValidateUserIsGroupAdminAsync<bool>(dto.GroupId, userId);
+            if (!isValidAdmin)
+            {
+                return errorResponseAdmin!;
+            }
+
+            var (isValidMember, errorResponseMember, Member) =
+                await _context.ValidateGroupMemberAsync<bool>(dto.GroupId, dto.NewAdminUserId);
+            if (!isValidMember)
+            {
+                return errorResponseMember!;
+            }
+
+            var currentGroup = await _context.Groups.FindAsync(dto.GroupId);
+            if (currentGroup == null)
+            {
+                return ServiceResponse<bool>.NotFoundResponse("Group not found");
+            }
+
+            currentGroup.AdminId = dto.NewAdminUserId;
+            await _context.SaveChangesAsync();
+            return ServiceResponse<bool>.SuccessResponse(true);
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<bool>.ErrorResponse("Failed to change admin", 500);
+        }
+    }
 }
 
-// leave group
-// change admin
+// leave group kan göra alla , admin men måste ge admin rol till nån annan utan att ta bort group 
+// för admin delete group hela group och eventer tas bort members ser inte längre den group som active
+// change admin , admin kan valja en annan member av grouppen som blir nu admin

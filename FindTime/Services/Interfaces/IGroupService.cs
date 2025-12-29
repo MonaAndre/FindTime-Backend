@@ -12,5 +12,6 @@ public interface IGroupService
     Task<ServiceResponse<List<GetAllGroupsResponse>>> GetAllGroupsAsync(string userId);
     Task<ServiceResponse<GroupInfoDtoResponse>> GetGroupInfoAsync(string userId, int groupId);
     Task<ServiceResponse<bool>> AddMemberToGroupAsync(AddMemberToGroupDtoRequest dto, string userId);
-    Task<ServiceResponse<bool>> DeleteMember(DeleteMemberDtoRequest dto, string userId);
+    Task<ServiceResponse<bool>> DeleteMemberAsync(DeleteMemberDtoRequest dto, string userId);
+    Task<ServiceResponse<bool>> ChangeAdminAsync(ChangeAdminDtoRequest dto, string userId);
 }

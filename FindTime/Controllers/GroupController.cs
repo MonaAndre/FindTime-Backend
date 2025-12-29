@@ -69,7 +69,15 @@ public class GroupController : ControllerBase
     public async Task<IActionResult> DeleteMember(DeleteMemberDtoRequest dto)
     {
         var userId = GetUserId();
-        var result = await _groupService.DeleteMember(dto, userId);
+        var result = await _groupService.DeleteMemberAsync(dto, userId);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    [HttpPost("change-group-admin")]
+    public async Task<IActionResult> ChangeGroupAdmin(ChangeAdminDtoRequest dto)
+    {
+        var userId = GetUserId();
+        var result = await _groupService.ChangeAdminAsync(dto, userId);
         return StatusCode(result.StatusCode, result);
     }
 }
