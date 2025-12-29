@@ -1,4 +1,3 @@
-using System.Dynamic;
 using FindTime.Common;
 using FindTime.Data;
 using FindTime.DTOs.GroupDTOs;
@@ -10,18 +9,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FindTime.Services.Implementations;
 
-public class GroupService : IGroupService
+public class GroupService(ApplicationDbContext context, UserManager<ApplicationUser> userManager)
+    : IGroupService
 {
-    private readonly ApplicationDbContext _context;
-    private readonly UserManager<ApplicationUser> _userManager;
-
-    public GroupService(ApplicationDbContext context, UserManager<ApplicationUser> userManager)
-    {
-        _context = context;
-        _userManager = userManager;
-    }
-
-
     public async Task<ServiceResponse<CreateGroupDtoResponse>> CreateGroupAsync(CreateGroupDtoRequest dto,
         string userId)
     {
@@ -32,7 +22,7 @@ public class GroupService : IGroupService
                 return ServiceResponse<CreateGroupDtoResponse>.ErrorResponse("Group name is required.");
             }
 
-            var (isValidUser, errorUser, user) = await _userManager.ValidateUserAsync<CreateGroupDtoResponse>(userId);
+            var (isValidUser, errorUser, user) = await userManager.ValidateUserAsync<CreateGroupDtoResponse>(userId);
             if (!isValidUser) return errorUser!;
 
             var newGroup = new Group
@@ -41,8 +31,8 @@ public class GroupService : IGroupService
                 AdminId = userId,
                 CreatedAt = DateTime.UtcNow
             };
-            await _context.Groups.AddAsync(newGroup);
-            await _context.SaveChangesAsync();
+            await context.Groups.AddAsync(newGroup);
+            await context.SaveChangesAsync();
 
             var adminGroupUser = new GroupUser
             {
@@ -51,13 +41,13 @@ public class GroupService : IGroupService
                 JoinedAt = DateTime.UtcNow,
                 IsActive = true
             };
-            await _context.GroupUsers.AddAsync(adminGroupUser);
+            await context.GroupUsers.AddAsync(adminGroupUser);
 
             var addedMembers = new List<GroupMemberDto>
             {
                 new GroupMemberDto
                 {
-                    Email = user.Email!,
+                    Email = user!.Email!,
                     FirstName = user.FirstName,
                     LastName = user.LastName,
                     IsAdmin = true
@@ -74,7 +64,7 @@ public class GroupService : IGroupService
                         continue;
                     }
 
-                    var newMember = await _userManager.FindByEmailAsync(email);
+                    var newMember = await userManager.FindByEmailAsync(email);
                     if (newMember == null || newMember.IsDeleted)
                     {
                         failedMembers.Add(email);
@@ -89,7 +79,7 @@ public class GroupService : IGroupService
                         JoinedAt = DateTime.UtcNow,
                         IsActive = true
                     };
-                    await _context.GroupUsers.AddAsync(foundUser);
+                    await context.GroupUsers.AddAsync(foundUser);
 
                     addedMembers.Add(new GroupMemberDto
                     {
@@ -101,7 +91,7 @@ public class GroupService : IGroupService
                 }
             }
 
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
             var response = new CreateGroupDtoResponse
             {
                 GroupId = newGroup.GroupId,
@@ -132,8 +122,8 @@ public class GroupService : IGroupService
                 return ServiceResponse<bool>.ErrorResponse("Group name can not be empty");
             }
 
-            var group = await _context.Groups.FindAsync(dto.GroupId);
-            var user = await _userManager.FindByIdAsync(userId);
+            var group = await context.Groups.FindAsync(dto.GroupId);
+            var user = await userManager.FindByIdAsync(userId);
             if (group == null || user == null)
             {
                 return user == null
@@ -142,16 +132,15 @@ public class GroupService : IGroupService
             }
 
             var (isValidMember, errorResponseMember, member) =
-                await _context.ValidateGroupMemberAsync<bool>(dto.GroupId, userId);
-            if (!isValidMember) return errorResponseMember!;
-
+                await context.ValidateGroupMemberAsync<bool>(dto.GroupId, userId);
+            if (!isValidMember || member == null) return errorResponseMember!;
 
             group.GroupName = dto.GroupName;
             group.Description = dto.Description;
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
             return ServiceResponse<bool>.SuccessResponse(true);
         }
-        catch (Exception e)
+        catch (Exception)
         {
             return ServiceResponse<bool>.ErrorResponse("Error updating group info", 500);
         }
@@ -162,16 +151,16 @@ public class GroupService : IGroupService
         try
         {
             var (isValidUser, errorResponseUser, user) =
-                await _userManager.ValidateUserAsync<List<GetAllGroupsResponse>>(userId);
+                await userManager.ValidateUserAsync<List<GetAllGroupsResponse>>(userId);
             if (!isValidUser)
                 return errorResponseUser!;
 
-            var userGroups = await _context.GroupUsers
+            var userGroups = await context.GroupUsers
                 .Include(member => member.Group)
                 .ThenInclude(g => g.Admin)
                 .Include(groupUsers => groupUsers.Group.GroupUsers)
                 .ThenInclude(groupUsers => groupUsers.User)
-                .Where(groupUser => groupUser.UserId == user.Id && groupUser.IsActive && !groupUser.Group.IsDeleted)
+                .Where(groupUser => groupUser.UserId == user!.Id && groupUser.IsActive && !groupUser.Group.IsDeleted)
                 .Select(groupUser => new GetAllGroupsResponse
                 {
                     GroupId = groupUser.Group.GroupId,
@@ -179,7 +168,7 @@ public class GroupService : IGroupService
                     Description = groupUser.Group.Description,
                     AdminEmail = groupUser.Group.AdminId,
                     AdminName = groupUser.Group.Admin.FirstName,
-                    IsAdmin = groupUser.Group.AdminId == user.Id,
+                    IsAdmin = groupUser.Group.AdminId == user!.Id,
                     CreatedAt = groupUser.Group.CreatedAt,
                     JoinedAt = groupUser.JoinedAt,
                     MemberCount = groupUser.Group.GroupUsers.Count(m => m.IsActive)
@@ -189,7 +178,7 @@ public class GroupService : IGroupService
             return ServiceResponse<List<GetAllGroupsResponse>>.SuccessResponse(userGroups,
                 $"Found {userGroups.Count} groups");
         }
-        catch (Exception e)
+        catch (Exception)
         {
             return ServiceResponse<List<GetAllGroupsResponse>>.ErrorResponse("Error getting groups", 500);
         }
@@ -200,10 +189,10 @@ public class GroupService : IGroupService
         try
         {
             var (isValidUser, errorResponseUser, user) =
-                await _userManager.ValidateUserAsync<GroupInfoDtoResponse>(userId);
+                await userManager.ValidateUserAsync<GroupInfoDtoResponse>(userId);
             if (!isValidUser) return errorResponseUser!;
 
-            var member = await _context.GroupUsers
+            var member = await context.GroupUsers
                 .Include(member => member.Group)
                 .ThenInclude(g => g.Admin)
                 .FirstOrDefaultAsync(gu => gu.GroupId == groupId && gu.UserId == userId && gu.IsActive);
@@ -219,8 +208,8 @@ public class GroupService : IGroupService
                 return ServiceResponse<GroupInfoDtoResponse>.NotFoundResponse("Group is deleted");
             }
 
-            var members = await _context.GroupUsers
-                .Include(member => member.User)
+            var members = await context.GroupUsers
+                .Include(m => m.User)
                 .Where(gu => gu.GroupId == groupId && gu.IsActive)
                 .Select(gu => new GroupMemberGroupDto
                 {
@@ -230,7 +219,7 @@ public class GroupService : IGroupService
                     LastName = gu.User.LastName,
                     JoinedAt = gu.JoinedAt,
                     ProfilePictureLink = gu.User.ProfilePicLink,
-                    IsAdmin = gu.UserId == user.Id
+                    IsAdmin = gu.UserId == user!.Id
                 })
                 .OrderByDescending(m => m.IsAdmin)
                 .ThenBy(m => m.FirstName)
@@ -242,7 +231,7 @@ public class GroupService : IGroupService
                 Description = group.Description,
                 AdminEmail = group.Admin.Email!,
                 Members = members,
-                IsAdmin = group.AdminId == user.Id,
+                IsAdmin = group.AdminId == user!.Id,
                 CreatedAt = group.CreatedAt,
                 JoinedAt = member.JoinedAt,
                 AdminName = group.Admin.FirstName,
@@ -250,7 +239,7 @@ public class GroupService : IGroupService
             };
             return ServiceResponse<GroupInfoDtoResponse>.SuccessResponse(groupInfo);
         }
-        catch (Exception e)
+        catch (Exception)
         {
             return ServiceResponse<GroupInfoDtoResponse>.ErrorResponse("Failed to get group info", 500);
         }
@@ -265,26 +254,26 @@ public class GroupService : IGroupService
                 return ServiceResponse<bool>.ErrorResponse("Email cannot be empty");
             }
 
-            var group = await _context.Groups.FindAsync(dto.GroupId);
+            var group = await context.Groups.FindAsync(dto.GroupId);
             if (group == null || group.IsDeleted)
             {
                 return ServiceResponse<bool>.ErrorResponse("Group not found");
             }
 
             var (isValidAdmin, errorResponseAdmin) =
-                await _context.ValidateUserIsGroupAdminAsync<bool>(dto.GroupId, userId);
+                await context.ValidateUserIsGroupAdminAsync<bool>(dto.GroupId, userId);
             if (!isValidAdmin)
             {
                 return errorResponseAdmin!;
             }
 
-            var newMember = await _userManager.FindByEmailAsync(dto.UserEmail);
+            var newMember = await userManager.FindByEmailAsync(dto.UserEmail);
             if (newMember == null || newMember.IsDeleted)
             {
                 return ServiceResponse<bool>.NotFoundResponse("User does not exist or was deleted");
             }
 
-            var exMember = await _context.GroupUsers
+            var exMember = await context.GroupUsers
                 .FirstOrDefaultAsync(gu => gu.GroupId == dto.GroupId && gu.UserId == newMember.Id);
             if (exMember != null)
             {
@@ -295,7 +284,7 @@ public class GroupService : IGroupService
 
                 exMember.IsActive = true;
                 exMember.JoinedAt = DateTime.UtcNow;
-                await _context.SaveChangesAsync();
+                await context.SaveChangesAsync();
                 return ServiceResponse<bool>.SuccessResponse(true, "Member re-added to the group");
             }
 
@@ -306,11 +295,11 @@ public class GroupService : IGroupService
                 JoinedAt = DateTime.UtcNow,
                 IsActive = true
             };
-            await _context.GroupUsers.AddAsync(newUserGroup);
-            await _context.SaveChangesAsync();
+            await context.GroupUsers.AddAsync(newUserGroup);
+            await context.SaveChangesAsync();
             return ServiceResponse<bool>.SuccessResponse(true, "Member added to the group");
         }
-        catch (Exception e)
+        catch (Exception)
         {
             return ServiceResponse<bool>.ErrorResponse("Failed to add new member", 500);
         }
@@ -320,28 +309,28 @@ public class GroupService : IGroupService
     {
         try
         {
-            var (isValidUser, errorResponseUser, user) = await _userManager.ValidateUserAsync<bool>(userId);
-            if (!isValidUser)
+            var (isValidUser, errorResponseUser, user) = await userManager.ValidateUserAsync<bool>(userId);
+            if (!isValidUser || user == null)
             {
                 return errorResponseUser!;
             }
 
             var (isValidAdmin, errorResponseAdmin) =
-                await _context.ValidateUserIsGroupAdminAsync<bool>(dto.GroupId, userId);
+                await context.ValidateUserIsGroupAdminAsync<bool>(dto.GroupId, userId);
             if (!isValidAdmin)
             {
                 return errorResponseAdmin!;
             }
 
             var (isValidGroupMember, errorResponseGroup, userToDelete) =
-                await _context.ValidateGroupMemberAsync<bool>(dto.GroupId, dto.UserId);
+                await context.ValidateGroupMemberAsync<bool>(dto.GroupId, dto.UserId);
             if (!isValidGroupMember)
             {
                 return errorResponseGroup!;
             }
 
             userToDelete!.IsActive = false;
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
             return ServiceResponse<bool>.SuccessResponse(true);
         }
         catch
@@ -354,43 +343,77 @@ public class GroupService : IGroupService
     {
         try
         {
-            var (isValidUser, errorResponseUser, user) = await _userManager.ValidateUserAsync<bool>(userId);
-            if (!isValidUser)
+            var (isValidUser, errorResponseUser, user) = await userManager.ValidateUserAsync<bool>(userId);
+            if (!isValidUser || user == null)
             {
                 return errorResponseUser!;
             }
 
             var (isValidAdmin, errorResponseAdmin) =
-                await _context.ValidateUserIsGroupAdminAsync<bool>(dto.GroupId, userId);
+                await context.ValidateUserIsGroupAdminAsync<bool>(dto.GroupId, userId);
             if (!isValidAdmin)
             {
                 return errorResponseAdmin!;
             }
 
-            var (isValidMember, errorResponseMember, Member) =
-                await _context.ValidateGroupMemberAsync<bool>(dto.GroupId, dto.NewAdminUserId);
-            if (!isValidMember)
+            var (isValidMember, errorResponseMember, member) =
+                await context.ValidateGroupMemberAsync<bool>(dto.GroupId, dto.NewAdminUserId);
+            if (!isValidMember || member == null)
             {
                 return errorResponseMember!;
             }
 
-            var currentGroup = await _context.Groups.FindAsync(dto.GroupId);
+            var currentGroup = await context.Groups.FindAsync(dto.GroupId);
             if (currentGroup == null)
             {
                 return ServiceResponse<bool>.NotFoundResponse("Group not found");
             }
 
             currentGroup.AdminId = dto.NewAdminUserId;
-            await _context.SaveChangesAsync();
-            return ServiceResponse<bool>.SuccessResponse(true);
+            await context.SaveChangesAsync();
+            return ServiceResponse<bool>.SuccessResponse(true, "Admin changed");
         }
-        catch (Exception e)
+        catch (Exception)
         {
             return ServiceResponse<bool>.ErrorResponse("Failed to change admin", 500);
         }
     }
-}
 
-// leave group kan göra alla , admin men måste ge admin rol till nån annan utan att ta bort group 
+    public async Task<ServiceResponse<bool>> LeaveGroupAsync(int groupId, string userId)
+    {
+        try
+        {
+            var (isValidUser, errorResponseUser, user) = await userManager.ValidateUserAsync<bool>(userId);
+            if (!isValidUser || user == null)
+            {
+                return errorResponseUser!;
+            }
+
+            var (isValidAdmin, errorResponseAdmin) =
+                await context.ValidateUserIsGroupAdminAsync<bool>(groupId, userId);
+            if (isValidAdmin)
+            {
+                return ServiceResponse<bool>.ErrorResponse(
+                    "You can not leave the group because you are admin of this group, please change admin first or delete this group");
+            }
+
+            var (isValidGroupMember, errorResponseGroupMember, memberWhoLeave) =
+                await context.ValidateGroupMemberAsync<bool>(groupId, userId);
+            if (!isValidGroupMember)
+            {
+                return errorResponseGroupMember!;
+            }
+
+            memberWhoLeave!.IsActive = false;
+            await context.SaveChangesAsync();
+            return ServiceResponse<bool>.SuccessResponse(true);
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<bool>.ErrorResponse($"Failed to leave group:{e}", 500);
+        }
+    }
+    
+    
+}
 // för admin delete group hela group och eventer tas bort members ser inte längre den group som active
-// change admin , admin kan valja en annan member av grouppen som blir nu admin

@@ -1,6 +1,5 @@
 using System.Text.RegularExpressions;
 using FindTime.Common;
-using FindTime.Data;
 using FindTime.DTOs.AuthDTOs;
 using FindTime.Models;
 using FindTime.Services.Interfaces;
@@ -8,29 +7,17 @@ using Microsoft.AspNetCore.Identity;
 
 namespace FindTime.Services.Implementations;
 
-public class AuthService : IAuthService
+public class AuthService(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager)
+    : IAuthService
 {
-    private readonly UserManager<ApplicationUser> _userManager;
-    private readonly SignInManager<ApplicationUser> _signInManager;
-    private readonly ApplicationDbContext _context;
-
-    public AuthService(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager,
-        ApplicationDbContext context)
-    {
-        _userManager = userManager;
-        _signInManager = signInManager;
-        _context = context;
-    }
-
     public async Task<ServiceResponse<AuthResponseDto>> RegisterAsync(RegisterDtoRequest dto)
     {
         try
         {
-            var existingUser = await _userManager.FindByEmailAsync(dto.Email);
+            var existingUser = await userManager.FindByEmailAsync(dto.Email);
             if (existingUser != null)
             {
-                return ServiceResponse<AuthResponseDto>.ErrorResponse("A user with this email already exists",
-                    400);
+                return ServiceResponse<AuthResponseDto>.ErrorResponse("A user with this email already exist");
             }
 
             var newUser = new ApplicationUser
@@ -45,7 +32,7 @@ public class AuthService : IAuthService
                 EmailConfirmed = true
             };
 
-            var result = await _userManager.CreateAsync(newUser, dto.Password);
+            var result = await userManager.CreateAsync(newUser, dto.Password);
 
             if (!result.Succeeded)
             {
@@ -60,7 +47,7 @@ public class AuthService : IAuthService
                 LastName = newUser.LastName,
             };
 
-            return ServiceResponse<AuthResponseDto>.SuccessResponse(response, "User created", 200);
+            return ServiceResponse<AuthResponseDto>.SuccessResponse(response, "User created");
         }
         catch (Exception ex)
         {
@@ -74,7 +61,7 @@ public class AuthService : IAuthService
     {
         try
         {
-            var user = await _userManager.FindByEmailAsync(dto.Email);
+            var user = await userManager.FindByEmailAsync(dto.Email);
             if (user == null)
                 return ServiceResponse<AuthResponseDto>.ErrorResponse(
                     "Invalid email or password",
@@ -88,7 +75,7 @@ public class AuthService : IAuthService
                 );
             }
 
-            var result = await _signInManager.PasswordSignInAsync(user, dto.Password, true, false);
+            var result = await signInManager.PasswordSignInAsync(user, dto.Password, true, false);
             if (!result.Succeeded)
                 return ServiceResponse<AuthResponseDto>.ErrorResponse("Invalid email or password ", 401);
 
@@ -116,7 +103,7 @@ public class AuthService : IAuthService
     {
         try
         {
-            await _signInManager.SignOutAsync();
+            await signInManager.SignOutAsync();
             return ServiceResponse<bool>.SuccessResponse(true);
         }
         catch (Exception e)
@@ -129,17 +116,17 @@ public class AuthService : IAuthService
     {
         try
         {
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await userManager.FindByIdAsync(userId);
 
             if (user == null)
             {
                 return ServiceResponse<bool>.NotFoundResponse("User not found");
             }
 
-            var isCurrentPasswordValid = await _userManager.CheckPasswordAsync(user, dto.CurrentPassword);
+            var isCurrentPasswordValid = await userManager.CheckPasswordAsync(user, dto.CurrentPassword);
             if (!isCurrentPasswordValid)
             {
-                return ServiceResponse<bool>.ErrorResponse("Current password is incorrect", 400);
+                return ServiceResponse<bool>.ErrorResponse("Current password is incorrect");
             }
 
             if (dto.NewPassword != dto.ConfirmNewPassword)
@@ -155,18 +142,18 @@ public class AuthService : IAuthService
                     "Password need to include minimum 8 characters, 1 big letter, 1 small letter and 1 special character");
             }
 
-            var result = await _userManager.ChangePasswordAsync(user, dto.CurrentPassword, dto.NewPassword);
+            var result = await userManager.ChangePasswordAsync(user, dto.CurrentPassword, dto.NewPassword);
 
             if (!result.Succeeded)
             {
                 return ServiceResponse<bool>.ErrorResponse("Failed to change password, try again later", 500);
             }
 
-            await _userManager.UpdateSecurityStampAsync(user);
-            await _signInManager.RefreshSignInAsync(user);
+            await userManager.UpdateSecurityStampAsync(user);
+            await signInManager.RefreshSignInAsync(user);
             return ServiceResponse<bool>.SuccessResponse(true);
         }
-        catch (Exception e)
+        catch (Exception)
         {
             return ServiceResponse<bool>.ErrorResponse("Failed to change password", 500);
         }

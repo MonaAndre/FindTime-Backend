@@ -9,15 +9,8 @@ namespace FindTime.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public class GroupController : ControllerBase
+public class GroupController(IGroupService groupService) : ControllerBase
 {
-    private readonly IGroupService _groupService;
-
-    public GroupController(IGroupService groupService)
-    {
-        _groupService = groupService;
-    }
-
     private string GetUserId()
     {
         return User.FindFirstValue(ClaimTypes.NameIdentifier) ??
@@ -28,7 +21,7 @@ public class GroupController : ControllerBase
     public async Task<IActionResult> CreateGroup(CreateGroupDtoRequest dto)
     {
         var userId = GetUserId();
-        var result = await _groupService.CreateGroupAsync(dto, userId);
+        var result = await groupService.CreateGroupAsync(dto, userId);
 
         return StatusCode(result.StatusCode, result);
     }
@@ -37,7 +30,7 @@ public class GroupController : ControllerBase
     public async Task<IActionResult> UpdateGroupInfo(UpdateGroupInfoDtoRequest dto)
     {
         var userId = GetUserId();
-        var result = await _groupService.UpdateGroupInfoAsync(dto, userId);
+        var result = await groupService.UpdateGroupInfoAsync(dto, userId);
         return StatusCode(result.StatusCode, result);
     }
 
@@ -45,7 +38,7 @@ public class GroupController : ControllerBase
     public async Task<IActionResult> GetAllGroups()
     {
         var userId = GetUserId();
-        var result = await _groupService.GetAllGroupsAsync(userId);
+        var result = await groupService.GetAllGroupsAsync(userId);
         return StatusCode(result.StatusCode, result);
     }
 
@@ -53,7 +46,7 @@ public class GroupController : ControllerBase
     public async Task<IActionResult> GetGroup(int groupId)
     {
         var userId = GetUserId();
-        var result = await _groupService.GetGroupInfoAsync(userId, groupId);
+        var result = await groupService.GetGroupInfoAsync(userId, groupId);
         return StatusCode(result.StatusCode, result);
     }
 
@@ -61,7 +54,7 @@ public class GroupController : ControllerBase
     public async Task<IActionResult> AddMemberToGroup(AddMemberToGroupDtoRequest dto)
     {
         var userId = GetUserId();
-        var result = await _groupService.AddMemberToGroupAsync(dto, userId);
+        var result = await groupService.AddMemberToGroupAsync(dto, userId);
         return StatusCode(result.StatusCode, result);
     }
 
@@ -69,7 +62,7 @@ public class GroupController : ControllerBase
     public async Task<IActionResult> DeleteMember(DeleteMemberDtoRequest dto)
     {
         var userId = GetUserId();
-        var result = await _groupService.DeleteMemberAsync(dto, userId);
+        var result = await groupService.DeleteMemberAsync(dto, userId);
         return StatusCode(result.StatusCode, result);
     }
 
@@ -77,7 +70,15 @@ public class GroupController : ControllerBase
     public async Task<IActionResult> ChangeGroupAdmin(ChangeAdminDtoRequest dto)
     {
         var userId = GetUserId();
-        var result = await _groupService.ChangeAdminAsync(dto, userId);
+        var result = await groupService.ChangeAdminAsync(dto, userId);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    [HttpPost("leave-group")]
+    public async Task<IActionResult> LeaveGroup(int groupId)
+    {
+        var userId = GetUserId();
+        var result = await groupService.LeaveGroupAsync(groupId, userId);
         return StatusCode(result.StatusCode, result);
     }
 }

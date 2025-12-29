@@ -1,6 +1,5 @@
 using System.Text.RegularExpressions;
 using FindTime.Common;
-using FindTime.Data;
 using FindTime.DTOs.UserDTOs;
 using FindTime.Models;
 using FindTime.Services.Interfaces;
@@ -8,25 +7,14 @@ using Microsoft.AspNetCore.Identity;
 
 namespace FindTime.Services.Implementations;
 
-public class UserService : IUserService
+public class UserService(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager)
+    : IUserService
 {
-    private readonly UserManager<ApplicationUser> _userManager;
-    private readonly SignInManager<ApplicationUser> _signInManager;
-    private readonly ApplicationDbContext _context;
-
-    public UserService(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager,
-        ApplicationDbContext context)
-    {
-        _userManager = userManager;
-        _signInManager = signInManager;
-        _context = context;
-    }
-
     public async Task<ServiceResponse<UserDto>> GetUserAsync(string userId)
     {
         try
         {
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await userManager.FindByIdAsync(userId);
             if (user == null || user.IsDeleted)
             {
                 return ServiceResponse<UserDto>.NotFoundResponse("User not found");
@@ -53,13 +41,13 @@ public class UserService : IUserService
     {
         try
         {
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await userManager.FindByIdAsync(userId);
             if (user == null || user.IsDeleted)
             {
                 return ServiceResponse<bool>.NotFoundResponse("User not found");
             }
 
-            var existingUser = await _userManager.FindByEmailAsync(dto.Email);
+            var existingUser = await userManager.FindByEmailAsync(dto.Email);
             if (existingUser != null)
             {
                 return ServiceResponse<bool>.ErrorResponse("Email already exists");
@@ -97,13 +85,13 @@ public class UserService : IUserService
 
             user.ProfilePicLink = dto.ProfilePicLink;
             string phonePattern = @"^\+?\d[\d\s\-]{6,14}\d$";
-            if (!Regex.IsMatch(dto.PhoneNumber, phonePattern))
+            if (!Regex.IsMatch(dto.PhoneNumber!, phonePattern))
             {
                 return ServiceResponse<bool>.ErrorResponse("Phone can not be empty and need to be valid");
             }
 
             user.PhoneNumber = dto.PhoneNumber;
-            var result = await _userManager.UpdateAsync(user);
+            var result = await userManager.UpdateAsync(user);
             if (!result.Succeeded)
             {
                 return ServiceResponse<bool>.ErrorResponse(result.Errors.First().Description, 500);
@@ -121,12 +109,12 @@ public class UserService : IUserService
     {
         try
         {
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await userManager.FindByIdAsync(userId);
             if (user == null || user.IsDeleted)
             {
                 return ServiceResponse<bool>.NotFoundResponse("User not found");
             }
-            
+
             user.IsDeleted = true;
             user.Email = $"{Guid.NewGuid()}@DELETED.Com";
             user.NormalizedEmail = user.Email.ToUpper();
@@ -137,16 +125,17 @@ public class UserService : IUserService
             user.LastName = "User";
             user.DeletedAt = DateTime.UtcNow;
             user.IsConfirmed = false;
-            var result = await _userManager.UpdateAsync(user);
-            await _userManager.UpdateSecurityStampAsync(user);
-            await _signInManager.SignOutAsync();
+            var result = await userManager.UpdateAsync(user);
+            await userManager.UpdateSecurityStampAsync(user);
+            await signInManager.SignOutAsync();
             if (!result.Succeeded)
             {
                 return ServiceResponse<bool>.ErrorResponse(result.Errors.First().Description, 500);
             }
+
             return ServiceResponse<bool>.SuccessResponse(result.Succeeded);
         }
-        catch (Exception e)
+        catch (Exception)
         {
             return ServiceResponse<bool>.ErrorResponse("Failed to delete user", 500);
         }

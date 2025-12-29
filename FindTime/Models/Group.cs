@@ -26,7 +26,6 @@ public class Group
     // Navigation properties
     [ForeignKey(nameof(AdminId))]
     public virtual ApplicationUser Admin { get; set; } = null!;
-    
     public virtual ICollection<GroupUser> GroupUsers { get; set; } = new List<GroupUser>();
     public virtual ICollection<Event> Events { get; set; } = new List<Event>();
     public virtual ICollection<UserGroupSettings> UserGroupSettings { get; set; } = new List<UserGroupSettings>();
