@@ -43,7 +43,11 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
                 IsActive = true
             };
             await context.GroupUsers.AddAsync(adminGroupUser);
-            await CreateDefUserGroupSet(userId, newGroup.GroupId);
+            var isCreatedUserSet = await CreateDefUserGroupSet(userId, newGroup.GroupId);
+            if (!isCreatedUserSet)
+            {
+                return ServiceResponse<CreateGroupDtoResponse>.ErrorResponse("Failed to add user group settings");
+            }
 
 
             var addedMembers = new List<GroupMemberDto>
@@ -91,7 +95,11 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
                         LastName = newMember.LastName,
                         IsAdmin = false
                     });
-                    await CreateDefUserGroupSet(newMember.Id, newGroup.GroupId);
+                    var isCreated = await CreateDefUserGroupSet(newMember.Id, newGroup.GroupId);
+                    if (!isCreated)
+                    {
+                        return ServiceResponse<CreateGroupDtoResponse>.ErrorResponse("Group creation failed.");
+                    }
                 }
             }
 
@@ -312,8 +320,10 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
             };
             await context.GroupUsers.AddAsync(newUserGroup);
             await context.SaveChangesAsync();
-            await CreateDefUserGroupSet(newMember.Id, dto.GroupId);
-            return ServiceResponse<bool>.SuccessResponse(true, "Member added to the group");
+            var isCreated = await CreateDefUserGroupSet(newMember.Id, dto.GroupId);
+            return !isCreated
+                ? ServiceResponse<bool>.ErrorResponse("Failed to add user settings")
+                : ServiceResponse<bool>.SuccessResponse(true, "Member added to the group");
         }
         catch (Exception)
         {
@@ -409,6 +419,7 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
             {
                 return errorResponseUser!;
             }
+
             var remainingActiveMembers =
                 await context.GroupUsers.CountAsync(gu => gu.GroupId == groupId && gu.IsActive && gu.UserId != userId);
 
@@ -429,7 +440,6 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
 
             memberWhoLeave!.IsActive = false;
 
-            
 
             if (remainingActiveMembers == 0)
             {
@@ -484,7 +494,7 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
                 return errorResponseAdmin!;
             }
 
-            currentGroup!.IsDeleted = true;
+            currentGroup.IsDeleted = true;
             await context.SaveChangesAsync();
             return ServiceResponse<bool>.SuccessResponse(true);
         }
@@ -534,7 +544,7 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
 
             var existingUserMemberSetting =
                 await context.UserMemberSettings.FirstOrDefaultAsync(ex =>
-                    ex.UserId == userId && ex.TargetUserId == dto.TargetUserId);
+                    ex.UserId == userId && ex.TargetUserId == dto.TargetUserId && ex.GroupId == dto.GroupId);
             if (existingUserMemberSetting != null)
             {
                 existingUserMemberSetting.Nickname = dto.Nickname;
@@ -570,8 +580,7 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
     public async Task<ServiceResponse<bool>> UpdateUserGroupSettings(UpdateUserGroupSettingsDtoRequest dto,
         string userId)
     {
-        
-        if (string.IsNullOrWhiteSpace(dto.GroupColor) || 
+        if (string.IsNullOrWhiteSpace(dto.GroupColor) ||
             !System.Text.RegularExpressions.Regex.IsMatch(dto.GroupColor, "^#([A-Fa-f0-9]{6})$"))
         {
             return ServiceResponse<bool>.ErrorResponse("Invalid color format. Use hex format like #ffffff");
@@ -582,21 +591,27 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
         {
             return errorResponseUser!;
         }
-        var (isValidGroupMember, errorResponseGroupMember, member) = await context.ValidateGroupMemberAsync<bool>(dto.GroupId, userId);
+
+        var (isValidGroupMember, errorResponseGroupMember, member) =
+            await context.ValidateGroupMemberAsync<bool>(dto.GroupId, userId);
         if (!isValidGroupMember || member == null)
         {
             return errorResponseGroupMember!;
         }
-        var updatedUserGroupSettings = await context.UserGroupSettings.FirstOrDefaultAsync(g => g.UserId == userId && g.GroupId == dto.GroupId);
+
+        var updatedUserGroupSettings =
+            await context.UserGroupSettings.FirstOrDefaultAsync(g => g.UserId == userId && g.GroupId == dto.GroupId);
         if (updatedUserGroupSettings == null)
         {
             return ServiceResponse<bool>.NotFoundResponse("User group settings are not found");
         }
+
         updatedUserGroupSettings.GroupColor = dto.GroupColor;
         updatedUserGroupSettings.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync();
-        
-        return ServiceResponse<bool>.SuccessResponse(true, $"The user group settings updated for the color {updatedUserGroupSettings.GroupColor}");
+
+        return ServiceResponse<bool>.SuccessResponse(true,
+            $"The user group settings updated for the color {updatedUserGroupSettings.GroupColor}");
     }
 
 
