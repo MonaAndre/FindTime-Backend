@@ -409,10 +409,12 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
             {
                 return errorResponseUser!;
             }
+            var remainingActiveMembers =
+                await context.GroupUsers.CountAsync(gu => gu.GroupId == groupId && gu.IsActive && gu.UserId != userId);
 
             var (isValidAdmin, errorResponseAdmin) =
                 await context.ValidateUserIsGroupAdminAsync<bool>(groupId, userId);
-            if (isValidAdmin)
+            if (isValidAdmin && remainingActiveMembers > 0)
             {
                 return ServiceResponse<bool>.ErrorResponse(
                     "You can not leave the group because you are admin of this group, please change admin first or delete this group");
@@ -426,6 +428,23 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
             }
 
             memberWhoLeave!.IsActive = false;
+
+            
+
+            if (remainingActiveMembers == 0)
+            {
+                var group = await context.Groups.FindAsync(groupId);
+                if (group != null)
+                {
+                    group.IsDeleted = true;
+                    group.DeletedAt = DateTime.UtcNow;
+                }
+
+                await context.SaveChangesAsync();
+                return ServiceResponse<bool>.SuccessResponse(true,
+                    "You were the last member. The group would be deleted automatically");
+            }
+
             await context.SaveChangesAsync();
             return ServiceResponse<bool>.SuccessResponse(true);
         }
