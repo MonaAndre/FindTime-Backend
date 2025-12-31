@@ -338,6 +338,11 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
                 return errorResponseAdmin!;
             }
 
+            if (dto.UserId == userId)
+            {
+                return ServiceResponse<bool>.ErrorResponse("You cannot remove yourself");
+            }
+
             var (isValidGroupMember, errorResponseGroup, userToDelete) =
                 await context.ValidateGroupMemberAsync<bool>(dto.GroupId, dto.UserId);
             if (!isValidGroupMember)
