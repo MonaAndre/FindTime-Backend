@@ -29,7 +29,8 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
             {
                 GroupName = dto.GroupName,
                 AdminId = userId,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                Description = dto.Description
             };
             await context.Groups.AddAsync(newGroup);
             await context.SaveChangesAsync();
@@ -42,6 +43,8 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
                 IsActive = true
             };
             await context.GroupUsers.AddAsync(adminGroupUser);
+            await CreateDefUserGroupSet(userId, newGroup.GroupId);
+
 
             var addedMembers = new List<GroupMemberDto>
             {
@@ -88,6 +91,7 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
                         LastName = newMember.LastName,
                         IsAdmin = false
                     });
+                    await CreateDefUserGroupSet(newMember.Id, newGroup.GroupId);
                 }
             }
 
@@ -208,6 +212,11 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
                 return ServiceResponse<GroupInfoDtoResponse>.NotFoundResponse("Group is deleted");
             }
 
+
+            var userGroupSettings =
+                await context.UserGroupSettings.FirstOrDefaultAsync(us => us.UserId == userId && us.GroupId == groupId);
+
+
             var members = await context.GroupUsers
                 .Include(m => m.User)
                 .Where(gu => gu.GroupId == groupId && gu.IsActive)
@@ -229,6 +238,7 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
                 GroupId = group.GroupId,
                 GroupName = group.GroupName,
                 Description = group.Description,
+                UserGroupColor = userGroupSettings!.GroupColor,
                 AdminEmail = group.Admin.Email!,
                 Members = members,
                 IsAdmin = group.AdminId == user!.Id,
@@ -297,6 +307,7 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
             };
             await context.GroupUsers.AddAsync(newUserGroup);
             await context.SaveChangesAsync();
+            await CreateDefUserGroupSet(newMember.Id, dto.GroupId);
             return ServiceResponse<bool>.SuccessResponse(true, "Member added to the group");
         }
         catch (Exception)
@@ -432,7 +443,7 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
 
             var (isValidGroupMember, errorResponseGroupMember, member) =
                 await context.ValidateGroupMemberAsync<bool>(groupId, userId);
-            if (!isValidGroupMember|| member == null)
+            if (!isValidGroupMember || member == null)
             {
                 return ServiceResponse<bool>.NotFoundResponse("Group not found");
             }
@@ -451,6 +462,28 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
         catch (Exception e)
         {
             return ServiceResponse<bool>.ErrorResponse($"Failed to delete group:{e}", 500);
+        }
+    }
+
+    public async Task<bool> CreateDefUserGroupSet(string userId, int groupId)
+    {
+        try
+        {
+            var defUserSettings = new UserGroupSettings
+            {
+                UserId = userId,
+                GroupId = groupId,
+                GroupColor = "#ffffff",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            await context.AddAsync(defUserSettings);
+            await context.SaveChangesAsync();
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 }

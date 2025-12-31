@@ -17,7 +17,7 @@ public class UserGroupSettings
 
     [Required]
     [MaxLength(7)] // Hex color code
-    public string GroupColor { get; set; } = "#3B82F6"; // Default blue color
+    public string GroupColor { get; set; } = "#ffffff";
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
