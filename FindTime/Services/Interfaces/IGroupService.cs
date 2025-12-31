@@ -18,4 +18,6 @@ public interface IGroupService
     Task<ServiceResponse<bool>> DeleteGroupAsync(int groupId, string userId);
 
     Task<ServiceResponse<bool>> AddNicknameToGroupMemberAsync(AddNicknameDtoRequest dto, string userId);
+    
+    Task<ServiceResponse<bool>> UpdateUserGroupSettings (UpdateUserGroupSettingsDtoRequest dto, string userId);
 }

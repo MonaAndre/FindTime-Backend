@@ -97,4 +97,12 @@ public class GroupController(IGroupService groupService) : ControllerBase
         var result = await groupService.AddNicknameToGroupMemberAsync(dto, userId);
         return StatusCode(result.StatusCode, result);
     }
+
+    [HttpPost("update-user-settings")]
+    public async Task<IActionResult> UpdateUserGroupSettings(UpdateUserGroupSettingsDtoRequest dto)
+    {
+        var userId = GetUserId();
+        var result = await groupService.UpdateUserGroupSettings(dto, userId);
+        return StatusCode(result.StatusCode, result);
+    }
 }

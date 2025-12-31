@@ -567,6 +567,39 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
         }
     }
 
+    public async Task<ServiceResponse<bool>> UpdateUserGroupSettings(UpdateUserGroupSettingsDtoRequest dto,
+        string userId)
+    {
+        
+        if (string.IsNullOrWhiteSpace(dto.GroupColor) || 
+            !System.Text.RegularExpressions.Regex.IsMatch(dto.GroupColor, "^#([A-Fa-f0-9]{6})$"))
+        {
+            return ServiceResponse<bool>.ErrorResponse("Invalid color format. Use hex format like #ffffff");
+        }
+
+        var (isValidUser, errorResponseUser, user) = await userManager.ValidateUserAsync<bool>(userId);
+        if (!isValidUser || user == null)
+        {
+            return errorResponseUser!;
+        }
+        var (isValidGroupMember, errorResponseGroupMember, member) = await context.ValidateGroupMemberAsync<bool>(dto.GroupId, userId);
+        if (!isValidGroupMember || member == null)
+        {
+            return errorResponseGroupMember!;
+        }
+        var updatedUserGroupSettings = await context.UserGroupSettings.FirstOrDefaultAsync(g => g.UserId == userId && g.GroupId == dto.GroupId);
+        if (updatedUserGroupSettings == null)
+        {
+            return ServiceResponse<bool>.NotFoundResponse("User group settings are not found");
+        }
+        updatedUserGroupSettings.GroupColor = dto.GroupColor;
+        updatedUserGroupSettings.UpdatedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync();
+        
+        return ServiceResponse<bool>.SuccessResponse(true, $"The user group settings updated for the color {updatedUserGroupSettings.GroupColor}");
+    }
+
+
     private async Task<bool> CreateDefUserGroupSet(string userId, int groupId)
     {
         try
