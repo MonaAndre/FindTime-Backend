@@ -216,7 +216,6 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
             var userGroupSettings =
                 await context.UserGroupSettings.FirstOrDefaultAsync(us => us.UserId == userId && us.GroupId == groupId);
 
-
             var members = await context.GroupUsers
                 .Include(m => m.User)
                 .Where(gu => gu.GroupId == groupId && gu.IsActive)
@@ -228,7 +227,13 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
                     LastName = gu.User.LastName,
                     JoinedAt = gu.JoinedAt,
                     ProfilePictureLink = gu.User.ProfilePicLink,
-                    IsAdmin = gu.UserId == user!.Id
+                    IsAdmin = gu.UserId == user!.Id,
+                    Nickname = context.UserMemberSettings
+                        .Where(ums => ums.UserId == userId
+                                      && ums.TargetUserId == gu.UserId
+                                      && ums.GroupId == groupId)
+                        .Select(ums => ums.Nickname)
+                        .FirstOrDefault()
                 })
                 .OrderByDescending(m => m.IsAdmin)
                 .ThenBy(m => m.FirstName)
@@ -465,7 +470,80 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
         }
     }
 
-    public async Task<bool> CreateDefUserGroupSet(string userId, int groupId)
+    public async Task<ServiceResponse<bool>> AddNicknameToGroupMemberAsync(AddNicknameDtoRequest dto, string userId)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(dto.Nickname))
+            {
+                return ServiceResponse<bool>.NotFoundResponse("Nickname is required");
+            }
+
+            var (isValidUser, errorResponseUser, user) = await userManager.ValidateUserAsync<bool>(userId);
+            if (!isValidUser || user == null)
+            {
+                return errorResponseUser!;
+            }
+
+            var (isValidTargetUser, errorResponseTargetUser, targetUser) =
+                await userManager.ValidateUserAsync<bool>(dto.TargetUserId);
+
+            if (!isValidTargetUser || targetUser == null)
+            {
+                return errorResponseTargetUser!;
+            }
+
+            var (isValidGroupMember, errorResponseGroupMember, member) =
+                await context.ValidateGroupMemberAsync<bool>(dto.GroupId, userId);
+            if (!isValidGroupMember || member == null)
+            {
+                return errorResponseGroupMember!;
+            }
+
+            var (isValidTargetMember, errorResponseGroupTargetM, targetMember) =
+                await context.ValidateGroupMemberAsync<bool>(dto.GroupId, dto.TargetUserId);
+            if (!isValidTargetMember || targetMember == null)
+            {
+                return errorResponseGroupTargetM!;
+            }
+
+
+            var existingUserMemberSetting =
+                await context.UserMemberSettings.FirstOrDefaultAsync(ex =>
+                    ex.UserId == userId && ex.TargetUserId == dto.TargetUserId);
+            if (existingUserMemberSetting != null)
+            {
+                existingUserMemberSetting.Nickname = dto.Nickname;
+                existingUserMemberSetting.UpdatedAt = DateTime.UtcNow;
+                await context.SaveChangesAsync();
+                return ServiceResponse<bool>.SuccessResponse(true, $"Nickname {dto.Nickname} updated");
+            }
+
+            if (existingUserMemberSetting == null)
+            {
+                var newUserMemberSetting = new UserMemberSettings
+                {
+                    UserId = userId,
+                    TargetUserId = targetUser.Id,
+                    GroupId = dto.GroupId,
+                    Nickname = dto.Nickname,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                await context.UserMemberSettings.AddAsync(newUserMemberSetting);
+                await context.SaveChangesAsync();
+            }
+
+            return ServiceResponse<bool>.SuccessResponse(true,
+                $"New nickname:{dto.Nickname} added to group:{dto.GroupId}");
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<bool>.ErrorResponse($"Failed to add nickname:{e}", 500);
+        }
+    }
+
+    private async Task<bool> CreateDefUserGroupSet(string userId, int groupId)
     {
         try
         {

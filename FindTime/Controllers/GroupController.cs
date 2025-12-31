@@ -81,11 +81,20 @@ public class GroupController(IGroupService groupService) : ControllerBase
         var result = await groupService.LeaveGroupAsync(groupId, userId);
         return StatusCode(result.StatusCode, result);
     }
+
     [HttpPost("delete-group/{groupId}")]
     public async Task<IActionResult> DeleteGroup(int groupId)
     {
         var userId = GetUserId();
         var result = await groupService.DeleteGroupAsync(groupId, userId);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    [HttpPost("add-nickname")]
+    public async Task<IActionResult> AddNickname(AddNicknameDtoRequest dto)
+    {
+        var userId = GetUserId();
+        var result = await groupService.AddNicknameToGroupMemberAsync(dto, userId);
         return StatusCode(result.StatusCode, result);
     }
 }
