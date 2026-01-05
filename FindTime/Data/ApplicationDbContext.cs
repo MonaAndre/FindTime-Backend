@@ -4,13 +4,9 @@ using FindTime.Models;
 
 namespace FindTime.Data;
 
-public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
+public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+    : IdentityDbContext<ApplicationUser>(options)
 {
-    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
-        : base(options)
-    {
-    }
-
     // DbSets
     public DbSet<Group> Groups { get; set; }
     public DbSet<GroupUser> GroupUsers { get; set; }

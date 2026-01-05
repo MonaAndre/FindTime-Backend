@@ -56,4 +56,20 @@ public static class ServiceExtensions
 
         return (true, null, groupUser);
     }
+
+    public static async Task<(bool IsValid, ServiceResponse<T>? ErrorResponse, Category? Category)>
+        ValidateCategoryAsync<T>(
+            this ApplicationDbContext context,
+            int? categoryId,
+            int groupId)
+    {
+        var groupCategory = await context.Categories.FirstOrDefaultAsync(gc => gc.CategoryId == categoryId
+                                                                               && gc.GroupId == groupId);
+        if (groupCategory == null)
+        {
+            return (false, ServiceResponse<T>.ForbiddenResponse("The category doesn't exist"), null);
+        }
+
+        return (true, null, groupCategory);
+    }
 }
