@@ -14,4 +14,5 @@ public class CreateEventDtoRequest
     public string? Location { get; set; }
     public bool IsRecurring { get; set; } = false;
     public RecurrencePattern? RecurrencePattern { get; set; }
+    public DateTime? RecurrenceEndTime { get; set; }
 }
