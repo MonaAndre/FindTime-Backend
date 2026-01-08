@@ -14,4 +14,7 @@ public interface IEventService
     Task<ServiceResponse<DeleteEventDtoResponse>> DeleteEventAsync(
         DeleteEventDtoRequest dto,
         string userId);
+
+    Task<ServiceResponse<List<GetAllGroupEventsResponse>>> GetAllGroupEventsAsync(int groupId,
+        string userId);
 }

@@ -226,7 +226,7 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
 
             var members = await context.GroupUsers
                 .Include(m => m.User)
-                .Where(gu => gu.GroupId == groupId && gu.IsActive)
+                .Where(m => m.GroupId == groupId && m.IsActive)
                 .Select(gu => new GroupMemberGroupDto
                 {
                     UserId = gu.UserId,
@@ -251,7 +251,7 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
                 GroupId = group.GroupId,
                 GroupName = group.GroupName,
                 Description = group.Description,
-                UserGroupColor = userGroupSettings!.GroupColor,
+                UserGroupColor = userGroupSettings?.GroupColor,
                 AdminEmail = group.Admin.Email!,
                 Members = members,
                 IsAdmin = group.AdminId == user!.Id,
@@ -262,9 +262,9 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
             };
             return ServiceResponse<GroupInfoDtoResponse>.SuccessResponse(groupInfo);
         }
-        catch (Exception)
+        catch (Exception e)
         {
-            return ServiceResponse<GroupInfoDtoResponse>.ErrorResponse("Failed to get group info", 500);
+            return ServiceResponse<GroupInfoDtoResponse>.ErrorResponse($"Failed to get group info {e}", 500);
         }
     }
 

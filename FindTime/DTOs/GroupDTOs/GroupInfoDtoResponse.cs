@@ -11,7 +11,7 @@ public class GroupInfoDtoResponse
     public int MemberCount { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime JoinedAt { get; set; }
-    public string UserGroupColor { get; set; } = string.Empty;
+    public string? UserGroupColor { get; set; } 
     public List<GroupMemberGroupDto> Members { get; set; } = new();
    
 

@@ -42,4 +42,12 @@ public class EventController(IEventService eventService) : ControllerBase
         var result = await eventService.DeleteEventAsync(dto, userId);
         return StatusCode(result.StatusCode, result);
     }
+
+    [HttpPost("get-group-events/{groupId}")]
+    public async Task<IActionResult> GetAllGroupEvents(int groupId)
+    {
+        var userId = GetUserId();
+        var result = await eventService.GetAllGroupEventsAsync(groupId, userId);
+        return StatusCode(result.StatusCode, result);
+    }
 }

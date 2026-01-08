@@ -85,8 +85,8 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                 CreatorUserId = userId,
                 IsRecurring = dto.IsRecurring,
                 RecurrencePattern = dto.RecurrencePattern,
-                RecurrenceEndTime = dto.RecurrenceEndTime,  
-                RecurringGroupId = null, 
+                RecurrenceEndTime = dto.RecurrenceEndTime,
+                RecurringGroupId = null,
                 CreatedAt = DateTime.UtcNow,
             };
 
@@ -120,24 +120,25 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                 IsRecurring = newEvent.IsRecurring,
                 RecurrencePattern = newEvent.RecurrencePattern,
                 RecurrenceEndTime = newEvent.RecurrenceEndTime,
-                
+
                 RecurringInstancesCreated = recurringInstancesCreated > 0
                     ? recurringInstancesCreated
                     : null
             };
 
             return ServiceResponse<CreateEventDtoResponse>.SuccessResponse(
-                createdEvent, 
-                dto.IsRecurring 
+                createdEvent,
+                dto.IsRecurring
                     ? $"Event created with {recurringInstancesCreated} recurring instances"
-                    : "Event created");        }
+                    : "Event created");
+        }
         catch (Exception e)
         {
             return ServiceResponse<CreateEventDtoResponse>.ErrorResponse($"Failed to create event: {e.Message}");
         }
     }
-    
-     public async Task<ServiceResponse<UpdateEventDtoResponse>> UpdateEventAsync(
+
+    public async Task<ServiceResponse<UpdateEventDtoResponse>> UpdateEventAsync(
         UpdateEventDtoRequest dto,
         string userId)
     {
@@ -215,6 +216,7 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                         {
                             UpdateSingleEvent(evt, dto);
                         }
+
                         updatedCount = futureEvents.Count;
                     }
                     else
@@ -231,8 +233,10 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                         {
                             UpdateSingleEvent(evt, dto);
                         }
+
                         updatedCount = 1 + futureInstances.Count;
                     }
+
                     break;
 
                 case UpdateRecurringOption.AllEvents:
@@ -256,6 +260,7 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                         {
                             UpdateSingleEvent(evt, dto);
                         }
+
                         updatedCount += allInstances.Count;
                     }
                     else
@@ -271,8 +276,10 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                         {
                             UpdateSingleEvent(evt, dto);
                         }
+
                         updatedCount = 1 + allInstances.Count;
                     }
+
                     break;
             }
 
@@ -361,6 +368,7 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                             evt.IsDeleted = true;
                             evt.DeletedAt = DateTime.UtcNow;
                         }
+
                         deletedCount = futureEvents.Count;
                     }
                     else
@@ -379,8 +387,10 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                             evt.IsDeleted = true;
                             evt.DeletedAt = DateTime.UtcNow;
                         }
+
                         deletedCount = 1 + futureInstances.Count;
                     }
+
                     break;
 
                 case DeleteRecurringOption.AllEvents:
@@ -406,6 +416,7 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                             evt.IsDeleted = true;
                             evt.DeletedAt = DateTime.UtcNow;
                         }
+
                         deletedCount += allInstances.Count;
                     }
                     else
@@ -423,8 +434,10 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                             evt.IsDeleted = true;
                             evt.DeletedAt = DateTime.UtcNow;
                         }
+
                         deletedCount = 1 + allInstances.Count;
                     }
+
                     break;
             }
 
@@ -456,11 +469,50 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
         }
     }
 
+    public async Task<ServiceResponse<List<GetAllGroupEventsResponse>>> GetAllGroupEventsAsync(int groupId,
+        string userId)
+    {
+        try
+        {
+            var (isValidUser, errorResponseUser, user) =
+                await userManager.ValidateUserAsync<List<GetAllGroupEventsResponse>>(userId);
+            if (!isValidUser)
+                return errorResponseUser!;
+
+            var (isValidMember, errorMember, member) =
+                await context.ValidateGroupMemberAsync<List<GetAllGroupEventsResponse>>(groupId, userId);
+            if (!isValidMember || member == null)
+            {
+                return errorMember!;
+            }
+
+            var events = await context.Events
+                .Where(e => e.GroupId == groupId && !e.IsDeleted)
+                .Include(cat => cat.Category)
+                .Select(ev => new GetAllGroupEventsResponse
+                {
+                    EventId = ev.EventId,
+                    EventName = ev.EventName,
+                    EventDescription = ev.EventDescription,
+                    StartTime = ev.StartTime,
+                    EndTime = ev.EndTime,
+                    CategoryId = ev.CategoryId,
+                    CategoryColor = ev.Category!.Color
+                })
+                .ToListAsync();
+            return ServiceResponse<List<GetAllGroupEventsResponse>>.SuccessResponse(events);
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<List<GetAllGroupEventsResponse>>.ErrorResponse(
+                $"Failed to get all group events, {e}", 500);
+        }
+    }
+
     private void UpdateSingleEvent(Event eventToUpdate, UpdateEventDtoRequest dto)
     {
-        // Beräkna tidsskillnaden mellan gammalt och nytt startdatum
         var timeDifference = dto.StartTime - eventToUpdate.StartTime;
-        
+
         eventToUpdate.EventName = dto.EventName;
         eventToUpdate.EventDescription = dto.EventDescription;
         eventToUpdate.StartTime = dto.StartTime;
@@ -469,12 +521,13 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
         eventToUpdate.Location = dto.Location;
         eventToUpdate.UpdatedAt = DateTime.UtcNow;
     }
-    
+
     private async Task<int> CreateRecurringEventsAsync(RecurrencePattern? recurrencePattern, Event baseEvent)
     {
         try
         {
-            var endDate = baseEvent.RecurrenceEndTime ?? GetDefaultRecurenceEndDate(baseEvent.StartTime, recurrencePattern);
+            var endDate = baseEvent.RecurrenceEndTime ??
+                          GetDefaultRecurenceEndDate(baseEvent.StartTime, recurrencePattern);
             var eventsToAdd = new List<Event>();
             var currentStartTime = baseEvent.StartTime;
             var eventDuration = baseEvent.EndTime - baseEvent.StartTime;
