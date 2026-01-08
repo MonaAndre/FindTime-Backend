@@ -26,4 +26,20 @@ public class EventController(IEventService eventService) : ControllerBase
         var result = await eventService.CreateEventAsync(dto, userId);
         return StatusCode(result.StatusCode, result);
     }
+
+    [HttpPost("update-event")]
+    public async Task<IActionResult> UpdateEvent(UpdateEventDtoRequest dto)
+    {
+        var userId = GetUserId();
+        var result = await eventService.UpdateEventAsync(dto, userId);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    [HttpPost("delete-event")]
+    public async Task<IActionResult> DeleteEvent(DeleteEventDtoRequest dto)
+    {
+        var userId = GetUserId();
+        var result = await eventService.DeleteEventAsync(dto, userId);
+        return StatusCode(result.StatusCode, result);
+    }
 }

@@ -5,6 +5,7 @@ using FindTime.Extensions;
 using FindTime.Models;
 using FindTime.Services.Interfaces;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace FindTime.Services.Implementations;
 
@@ -135,7 +136,340 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
             return ServiceResponse<CreateEventDtoResponse>.ErrorResponse($"Failed to create event: {e.Message}");
         }
     }
+    
+     public async Task<ServiceResponse<UpdateEventDtoResponse>> UpdateEventAsync(
+        UpdateEventDtoRequest dto,
+        string userId)
+    {
+        try
+        {
+            var eventToUpdate = await context.Events
+                .Include(e => e.Group)
+                .FirstOrDefaultAsync(e => e.EventId == dto.EventId && !e.IsDeleted);
 
+            if (eventToUpdate == null)
+            {
+                return ServiceResponse<UpdateEventDtoResponse>.NotFoundResponse("Event not found");
+            }
+
+            var (isValidMember, errorResponseGroupMem, groupMember) =
+                await context.ValidateGroupMemberAsync<UpdateEventDtoResponse>(
+                    eventToUpdate.GroupId,
+                    userId);
+            if (!isValidMember || groupMember == null)
+            {
+                return errorResponseGroupMem!;
+            }
+
+            var isAdmin = eventToUpdate.Group.AdminId == userId;
+            var isCreator = eventToUpdate.CreatorUserId == userId;
+
+            if (!isAdmin && !isCreator)
+            {
+                return ServiceResponse<UpdateEventDtoResponse>.ForbiddenResponse(
+                    "Only the event creator or group admin can update this event");
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.EventName))
+            {
+                return ServiceResponse<UpdateEventDtoResponse>.ErrorResponse("Event name cannot be empty");
+            }
+
+            if (dto.EndTime <= dto.StartTime)
+            {
+                return ServiceResponse<UpdateEventDtoResponse>.ErrorResponse(
+                    "End time must be after start time");
+            }
+
+            if (dto.CategoryId != null)
+            {
+                var (isValidCategory, errorResponseCategory, groupCategory) =
+                    await context.ValidateCategoryAsync<UpdateEventDtoResponse>(
+                        dto.CategoryId,
+                        eventToUpdate.GroupId);
+                if (!isValidCategory || groupCategory == null)
+                {
+                    return errorResponseCategory!;
+                }
+            }
+
+            var updatedCount = 0;
+
+            switch (dto.UpdateOption)
+            {
+                case UpdateRecurringOption.ThisEventOnly:
+                    UpdateSingleEvent(eventToUpdate, dto);
+                    updatedCount = 1;
+                    break;
+
+                case UpdateRecurringOption.ThisAndFutureEvents:
+                    if (eventToUpdate.RecurringGroupId.HasValue)
+                    {
+                        var futureEvents = await context.Events
+                            .Where(e => e.RecurringGroupId == eventToUpdate.RecurringGroupId
+                                        && e.StartTime >= eventToUpdate.StartTime
+                                        && !e.IsDeleted)
+                            .ToListAsync();
+
+                        foreach (var evt in futureEvents)
+                        {
+                            UpdateSingleEvent(evt, dto);
+                        }
+                        updatedCount = futureEvents.Count;
+                    }
+                    else
+                    {
+                        UpdateSingleEvent(eventToUpdate, dto);
+
+                        var futureInstances = await context.Events
+                            .Where(e => e.RecurringGroupId == eventToUpdate.EventId
+                                        && e.StartTime >= eventToUpdate.StartTime
+                                        && !e.IsDeleted)
+                            .ToListAsync();
+
+                        foreach (var evt in futureInstances)
+                        {
+                            UpdateSingleEvent(evt, dto);
+                        }
+                        updatedCount = 1 + futureInstances.Count;
+                    }
+                    break;
+
+                case UpdateRecurringOption.AllEvents:
+                    if (eventToUpdate.RecurringGroupId.HasValue)
+                    {
+                        var masterEvent = await context.Events
+                            .FirstOrDefaultAsync(e => e.EventId == eventToUpdate.RecurringGroupId.Value);
+
+                        if (masterEvent != null)
+                        {
+                            UpdateSingleEvent(masterEvent, dto);
+                            updatedCount++;
+                        }
+
+                        var allInstances = await context.Events
+                            .Where(e => e.RecurringGroupId == eventToUpdate.RecurringGroupId
+                                        && !e.IsDeleted)
+                            .ToListAsync();
+
+                        foreach (var evt in allInstances)
+                        {
+                            UpdateSingleEvent(evt, dto);
+                        }
+                        updatedCount += allInstances.Count;
+                    }
+                    else
+                    {
+                        UpdateSingleEvent(eventToUpdate, dto);
+
+                        var allInstances = await context.Events
+                            .Where(e => e.RecurringGroupId == eventToUpdate.EventId
+                                        && !e.IsDeleted)
+                            .ToListAsync();
+
+                        foreach (var evt in allInstances)
+                        {
+                            UpdateSingleEvent(evt, dto);
+                        }
+                        updatedCount = 1 + allInstances.Count;
+                    }
+                    break;
+            }
+
+            await context.SaveChangesAsync();
+
+            var response = new UpdateEventDtoResponse
+            {
+                UpdatedCount = updatedCount,
+                Message = dto.UpdateOption switch
+                {
+                    UpdateRecurringOption.ThisEventOnly => "Event updated successfully",
+                    UpdateRecurringOption.ThisAndFutureEvents =>
+                        $"{updatedCount} event(s) updated (this and future events)",
+                    UpdateRecurringOption.AllEvents =>
+                        $"{updatedCount} event(s) updated (all recurring instances)",
+                    _ => "Event updated successfully"
+                }
+            };
+
+            return ServiceResponse<UpdateEventDtoResponse>.SuccessResponse(
+                response,
+                response.Message);
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<UpdateEventDtoResponse>.ErrorResponse(
+                $"Failed to update event: {e.Message}",
+                500);
+        }
+    }
+
+    public async Task<ServiceResponse<DeleteEventDtoResponse>> DeleteEventAsync(
+        DeleteEventDtoRequest dto,
+        string userId)
+    {
+        try
+        {
+            var eventToDelete = await context.Events
+                .Include(e => e.Group)
+                .FirstOrDefaultAsync(e => e.EventId == dto.EventId && !e.IsDeleted);
+
+            if (eventToDelete == null)
+            {
+                return ServiceResponse<DeleteEventDtoResponse>.NotFoundResponse("Event not found");
+            }
+
+            var (isValidMember, errorResponseGroupMem, groupMember) =
+                await context.ValidateGroupMemberAsync<DeleteEventDtoResponse>(
+                    eventToDelete.GroupId,
+                    userId);
+            if (!isValidMember || groupMember == null)
+            {
+                return errorResponseGroupMem!;
+            }
+
+            var isAdmin = eventToDelete.Group.AdminId == userId;
+            var isCreator = eventToDelete.CreatorUserId == userId;
+
+            if (!isAdmin && !isCreator)
+            {
+                return ServiceResponse<DeleteEventDtoResponse>.ForbiddenResponse(
+                    "Only the event creator or group admin can delete this event");
+            }
+
+            var deletedCount = 0;
+
+            switch (dto.DeleteOption)
+            {
+                case DeleteRecurringOption.ThisEventOnly:
+                    eventToDelete.IsDeleted = true;
+                    eventToDelete.DeletedAt = DateTime.UtcNow;
+                    deletedCount = 1;
+                    break;
+
+                case DeleteRecurringOption.ThisAndFutureEvents:
+                    if (eventToDelete.RecurringGroupId.HasValue)
+                    {
+                        var futureEvents = await context.Events
+                            .Where(e => e.RecurringGroupId == eventToDelete.RecurringGroupId
+                                        && e.StartTime >= eventToDelete.StartTime
+                                        && !e.IsDeleted)
+                            .ToListAsync();
+
+                        foreach (var evt in futureEvents)
+                        {
+                            evt.IsDeleted = true;
+                            evt.DeletedAt = DateTime.UtcNow;
+                        }
+                        deletedCount = futureEvents.Count;
+                    }
+                    else
+                    {
+                        eventToDelete.IsDeleted = true;
+                        eventToDelete.DeletedAt = DateTime.UtcNow;
+
+                        var futureInstances = await context.Events
+                            .Where(e => e.RecurringGroupId == eventToDelete.EventId
+                                        && e.StartTime >= eventToDelete.StartTime
+                                        && !e.IsDeleted)
+                            .ToListAsync();
+
+                        foreach (var evt in futureInstances)
+                        {
+                            evt.IsDeleted = true;
+                            evt.DeletedAt = DateTime.UtcNow;
+                        }
+                        deletedCount = 1 + futureInstances.Count;
+                    }
+                    break;
+
+                case DeleteRecurringOption.AllEvents:
+                    if (eventToDelete.RecurringGroupId.HasValue)
+                    {
+                        var masterEvent = await context.Events
+                            .FirstOrDefaultAsync(e => e.EventId == eventToDelete.RecurringGroupId.Value);
+
+                        if (masterEvent != null)
+                        {
+                            masterEvent.IsDeleted = true;
+                            masterEvent.DeletedAt = DateTime.UtcNow;
+                            deletedCount++;
+                        }
+
+                        var allInstances = await context.Events
+                            .Where(e => e.RecurringGroupId == eventToDelete.RecurringGroupId
+                                        && !e.IsDeleted)
+                            .ToListAsync();
+
+                        foreach (var evt in allInstances)
+                        {
+                            evt.IsDeleted = true;
+                            evt.DeletedAt = DateTime.UtcNow;
+                        }
+                        deletedCount += allInstances.Count;
+                    }
+                    else
+                    {
+                        eventToDelete.IsDeleted = true;
+                        eventToDelete.DeletedAt = DateTime.UtcNow;
+
+                        var allInstances = await context.Events
+                            .Where(e => e.RecurringGroupId == eventToDelete.EventId
+                                        && !e.IsDeleted)
+                            .ToListAsync();
+
+                        foreach (var evt in allInstances)
+                        {
+                            evt.IsDeleted = true;
+                            evt.DeletedAt = DateTime.UtcNow;
+                        }
+                        deletedCount = 1 + allInstances.Count;
+                    }
+                    break;
+            }
+
+            await context.SaveChangesAsync();
+
+            var response = new DeleteEventDtoResponse
+            {
+                DeletedCount = deletedCount,
+                Message = dto.DeleteOption switch
+                {
+                    DeleteRecurringOption.ThisEventOnly => "Event deleted successfully",
+                    DeleteRecurringOption.ThisAndFutureEvents =>
+                        $"{deletedCount} event(s) deleted (this and future events)",
+                    DeleteRecurringOption.AllEvents =>
+                        $"{deletedCount} event(s) deleted (all recurring instances)",
+                    _ => "Event deleted successfully"
+                }
+            };
+
+            return ServiceResponse<DeleteEventDtoResponse>.SuccessResponse(
+                response,
+                response.Message);
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<DeleteEventDtoResponse>.ErrorResponse(
+                $"Failed to delete event: {e.Message}",
+                500);
+        }
+    }
+
+    private void UpdateSingleEvent(Event eventToUpdate, UpdateEventDtoRequest dto)
+    {
+        // Beräkna tidsskillnaden mellan gammalt och nytt startdatum
+        var timeDifference = dto.StartTime - eventToUpdate.StartTime;
+        
+        eventToUpdate.EventName = dto.EventName;
+        eventToUpdate.EventDescription = dto.EventDescription;
+        eventToUpdate.StartTime = dto.StartTime;
+        eventToUpdate.EndTime = dto.EndTime;
+        eventToUpdate.CategoryId = dto.CategoryId;
+        eventToUpdate.Location = dto.Location;
+        eventToUpdate.UpdatedAt = DateTime.UtcNow;
+    }
+    
     private async Task<int> CreateRecurringEventsAsync(RecurrencePattern? recurrencePattern, Event baseEvent)
     {
         try
@@ -201,7 +535,7 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
         };
     }
 
-    private DateTime GetDefaultRecurenceEndDate(DateTime startDate, RecurrencePattern? pattern)
+    private static DateTime GetDefaultRecurenceEndDate(DateTime startDate, RecurrencePattern? pattern)
     {
         return pattern switch
         {
