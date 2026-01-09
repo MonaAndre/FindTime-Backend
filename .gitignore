@@ -3,3 +3,7 @@ obj/
 /packages/
 riderModule.iml
 /_ReSharper.Caches/
+/FindTime/Migrations/20260109195840_init2.cs
+/.vs
+/FindTime/Migrations
+/FindTime/Properties/launchSettings.json
