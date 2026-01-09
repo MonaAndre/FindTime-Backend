@@ -1,6 +1,7 @@
 using FindTime.Common;
 using FindTime.Data;
 using FindTime.DTOs.CategoryDto;
+using FindTime.DTOs.CategoryDTOs;
 using FindTime.Extensions;
 using FindTime.Models;
 using FindTime.Services.Interfaces;
@@ -27,7 +28,7 @@ public class CategoryService(UserManager<ApplicationUser> userManager, Applicati
                 return errorMember!;
             var existingCategoryName =
                 await context.Categories.FirstOrDefaultAsync(cat =>
-                    cat.Name.Trim().ToLower() == dto.CategoryName!.Trim().ToLower());
+                    cat.Name.Trim().ToLower() == dto.CategoryName!.Trim().ToLower() && cat.GroupId == dto.GroupId);
             if (existingCategoryName != null)
             {
                 return ServiceResponse<bool>.ErrorResponse("The category name already exists.", 409);
@@ -41,7 +42,7 @@ public class CategoryService(UserManager<ApplicationUser> userManager, Applicati
                 CreatedByUserId = userId,
                 CreatedAt = DateTime.UtcNow,
             };
-            
+
             await context.Categories.AddAsync(newCategory);
             await context.SaveChangesAsync();
 
@@ -52,4 +53,69 @@ public class CategoryService(UserManager<ApplicationUser> userManager, Applicati
             return ServiceResponse<bool>.ErrorResponse(e.Message, 500);
         }
     }
+    public async Task<ServiceResponse<bool>> AddOrUpdateCategoryToEventAsync(AddCategoryToEventDtoRequest dto, string userId)
+    {
+        try
+        {
+
+            var (isValidUser, errorResponsesUser, user) = await userManager.ValidateUserAsync<bool>(userId);
+            if (!isValidUser || user == null)
+            {
+                return errorResponsesUser!;
+            }
+            var (isValidMember, errorResponseMember, member) = await context.ValidateGroupMemberAsync<bool>(dto.GroupId, userId);
+            if (!isValidMember || member == null)
+            {
+                return errorResponseMember!;
+            }
+
+            var validCategoryId = await context.Categories.FirstOrDefaultAsync(vc => vc.CategoryId == dto.CategoryId && vc.GroupId == dto.GroupId);
+            if (validCategoryId == null)
+            {
+                return ServiceResponse<bool>.ErrorResponse("Category not found");
+            }
+            var foundEvent = await context.Events.FirstOrDefaultAsync(e => e.EventId == dto.EventId && e.GroupId == dto.GroupId);
+            if (foundEvent == null)
+            {
+                return ServiceResponse<bool>.ErrorResponse("Event not found");
+            }
+
+            if (foundEvent.IsRecurring == true)
+            {
+                int updatedCount = 0;
+                int masterEventId = foundEvent.RecurringGroupId ?? foundEvent.EventId;
+
+                var masterEvent = await context.Events
+                    .FirstOrDefaultAsync(e => e.EventId == masterEventId && e.GroupId == dto.GroupId);
+                if(masterEvent != null)
+                {
+                    masterEvent.CategoryId = dto.CategoryId;
+                    updatedCount++;
+                }
+              
+                var recurringEvents = await context.Events
+                .Where(re => re.GroupId == dto.GroupId && re.RecurringGroupId == masterEventId)
+                .ToListAsync();
+
+
+                foreach (var recurringEvent in recurringEvents)
+                {
+                    recurringEvent.CategoryId = dto.CategoryId;
+                }
+                updatedCount += recurringEvents.Count;
+
+                await context.SaveChangesAsync();
+                return ServiceResponse<bool>.SuccessResponse(true, $"Categories updated on {updatedCount} events");
+            }
+
+            foundEvent!.CategoryId = dto.CategoryId;
+            await context.SaveChangesAsync();
+            return ServiceResponse<bool>.SuccessResponse(true, $"Category updated for event {foundEvent?.Category?.Name}");
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<bool>.ErrorResponse($"Failed to add or update category{e.Message}");
+        }
+    }
+
 }

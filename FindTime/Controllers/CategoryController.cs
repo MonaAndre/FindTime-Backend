@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using FindTime.DTOs.CategoryDto;
+using FindTime.DTOs.CategoryDTOs;
 using FindTime.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -21,6 +22,12 @@ public class CategoryController(ICategoryService categoryService) : ControllerBa
     public async Task<IActionResult> CreateCategory(CreateCategoryDtoRequest dto)
     {
         var result = await categoryService.CreateCategoryAsync(dto, GetUserId());
+        return StatusCode(result.StatusCode, result);
+    }
+    [HttpPost("add-category")]
+    public async Task<IActionResult> AddCategory(AddCategoryToEventDtoRequest dto)
+    {
+        var result = await categoryService.AddOrUpdateCategoryToEventAsync(dto, GetUserId());
         return StatusCode(result.StatusCode, result);
     }
 }
