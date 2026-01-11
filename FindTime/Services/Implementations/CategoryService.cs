@@ -171,7 +171,7 @@ public class CategoryService(UserManager<ApplicationUser> userManager, Applicati
             var (isCategory, categoryError, category) = await context.ValidateCategoryAsync<bool>(dto.CategoryId, dto.GroupId);
             if (!isCategory || category == null) return categoryError!;
 
-            var categoryToUpdate = await context.Categories.FirstOrDefaultAsync(cu => cu.CategoryId == dto.CategoryId && cu.GroupId == dto.GroupId);
+            var categoryToUpdate = await context.Categories.FirstOrDefaultAsync(cu => cu.CategoryId == dto.CategoryId && cu.GroupId == dto.GroupId && cu.IsDeleted == false);
             categoryToUpdate!.Name = dto.CategoryName!;
             categoryToUpdate!.Color = dto.CategoryColor!;
 
