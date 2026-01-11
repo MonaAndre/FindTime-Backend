@@ -7,6 +7,7 @@ using FindTime.Models;
 using FindTime.Services.Interfaces;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using System.Text.RegularExpressions;
 
 namespace FindTime.Services.Implementations;
 
@@ -87,12 +88,12 @@ public class CategoryService(UserManager<ApplicationUser> userManager, Applicati
 
                 var masterEvent = await context.Events
                     .FirstOrDefaultAsync(e => e.EventId == masterEventId && e.GroupId == dto.GroupId);
-                if(masterEvent != null)
+                if (masterEvent != null)
                 {
                     masterEvent.CategoryId = dto.CategoryId;
                     updatedCount++;
                 }
-              
+
                 var recurringEvents = await context.Events
                 .Where(re => re.GroupId == dto.GroupId && re.RecurringGroupId == masterEventId)
                 .ToListAsync();
@@ -117,5 +118,72 @@ public class CategoryService(UserManager<ApplicationUser> userManager, Applicati
             return ServiceResponse<bool>.ErrorResponse($"Failed to add or update category{e.Message}");
         }
     }
+
+    public async Task<ServiceResponse<List<CategoryListDtoResponse>>> GetAllCategoriesAsync(int groupId, string userId)
+    {
+        try
+        {
+            var (isValidUser, errorResponseUser, user) = await userManager.ValidateUserAsync<List<CategoryListDtoResponse>>(userId);
+            if (!isValidUser && user == null)
+            {
+                return errorResponseUser!;
+            }
+            var (isMember, errorMember, member) = await context.ValidateGroupMemberAsync<List<CategoryListDtoResponse>>(groupId, userId);
+            if (!isMember && member == null)
+            {
+                return errorMember!;
+            }
+
+            var categoryList = await context.Categories.Where(cl => cl.GroupId == groupId).Select(
+                c => new CategoryListDtoResponse
+                {
+                    CategoryName = c.Name,
+                    CategoryColor = c.Color,
+                    CategoryId = c.CategoryId
+                }).ToListAsync();
+            return ServiceResponse<List<CategoryListDtoResponse>>.SuccessResponse(categoryList, $"Category list fetched with {categoryList.Count} categorie(s)");
+
+        }
+        catch (Exception e)
+        {
+
+            return ServiceResponse<List<CategoryListDtoResponse>>.ErrorResponse(e.Message, 500);
+        }
+    }
+    public async Task<ServiceResponse<bool>> UpdateCategoryAsync(UpdateCategoryRequestDto dto, string userId)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(dto.CategoryName) || string.IsNullOrWhiteSpace(dto.CategoryColor))
+            {
+                return ServiceResponse<bool>.ErrorResponse("Category name or color is empty");
+            }
+            var (isValidUser, errorResponseUser, user) = await userManager.ValidateUserAsync<bool>(userId);
+            if (!isValidUser && user == null)
+            {
+                return errorResponseUser!;
+            }
+            var (isMember, errorMember, member) = await context.ValidateGroupMemberAsync<bool>(dto.GroupId, userId);
+            if (!isMember && member == null)
+            {
+                return errorMember!;
+            }
+            var (isCategory, categoryError, category) = await context.ValidateCategoryAsync<bool>(dto.CategoryId, dto.GroupId);
+            if (!isCategory || category == null) return categoryError!;
+
+            var categoryToUpdate = await context.Categories.FirstOrDefaultAsync(cu => cu.CategoryId == dto.CategoryId && cu.GroupId == dto.GroupId);
+            categoryToUpdate!.Name = dto.CategoryName!;
+            categoryToUpdate!.Color = dto.CategoryColor!;
+
+            await context.SaveChangesAsync();
+            return ServiceResponse<bool>.SuccessResponse(true, "Category updated successfully");
+        }
+        catch (Exception e)
+        {
+
+            return ServiceResponse<bool>.ErrorResponse(e.Message, 500);
+        }
+    }
+
 
 }

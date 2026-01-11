@@ -30,4 +30,16 @@ public class CategoryController(ICategoryService categoryService) : ControllerBa
         var result = await categoryService.AddOrUpdateCategoryToEventAsync(dto, GetUserId());
         return StatusCode(result.StatusCode, result);
     }
+    [HttpGet("get-categories/{groupId}")]
+    public async Task<IActionResult> GetCategories(int groupId)
+    {
+        var result = await categoryService.GetAllCategoriesAsync(groupId, GetUserId());
+        return StatusCode(result.StatusCode, result);
+    }
+    [HttpPost("update-category")]
+    public async Task<IActionResult> UpdateCategory(UpdateCategoryRequestDto dto)
+    {
+        var result = await categoryService.UpdateCategoryAsync(dto, GetUserId());
+        return StatusCode(result.StatusCode, result);
+    }
 }
