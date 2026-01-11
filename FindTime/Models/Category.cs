@@ -24,6 +24,8 @@ public class Category
     public string CreatedByUserId { get; set; } = string.Empty;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public bool IsDeleted { get; set; } = false;
+    public DateTime DeletedAt { get; set; } = DateTime.UtcNow;
 
     // Navigation properties
     [ForeignKey(nameof(GroupId))]

@@ -134,7 +134,7 @@ public class CategoryService(UserManager<ApplicationUser> userManager, Applicati
                 return errorMember!;
             }
 
-            var categoryList = await context.Categories.Where(cl => cl.GroupId == groupId).Select(
+            var categoryList = await context.Categories.Where(cl => cl.GroupId == groupId && cl.IsDeleted == false).Select(
                 c => new CategoryListDtoResponse
                 {
                     CategoryName = c.Name,
@@ -177,6 +177,41 @@ public class CategoryService(UserManager<ApplicationUser> userManager, Applicati
 
             await context.SaveChangesAsync();
             return ServiceResponse<bool>.SuccessResponse(true, "Category updated successfully");
+        }
+        catch (Exception e)
+        {
+
+            return ServiceResponse<bool>.ErrorResponse(e.Message, 500);
+        }
+    }
+
+    public async Task<ServiceResponse<bool>> DeleteCategoryAsync(DeleteCategoryDtoRequest dto, string userId)
+    {
+        try
+        {
+            var (isValidUser, errorResponseUser, user) = await userManager.ValidateUserAsync<bool>(userId);
+            if (!isValidUser && user == null)
+            {
+                return errorResponseUser!;
+            }
+            var (isMember, errorMember, member) = await context.ValidateGroupMemberAsync<bool>(dto.GroupId, userId);
+            if (!isMember && member == null)
+            {
+                return errorMember!;
+            }
+            var (isCategory, categoryError, category) = await context.ValidateCategoryAsync<bool>(dto.CategoryId, dto.GroupId);
+            if (!isCategory || category == null) return categoryError!;
+
+            var categoryToDelete = await context.Categories.FirstOrDefaultAsync(cd => cd.CategoryId == dto.CategoryId && cd.GroupId == dto.GroupId);
+            if (categoryToDelete?.IsDeleted == true) return ServiceResponse<bool>.ErrorResponse("The category is already deleted");
+
+            categoryToDelete!.IsDeleted = true;
+            categoryToDelete.DeletedAt = DateTime.UtcNow;
+
+            await context.SaveChangesAsync();
+
+            return ServiceResponse<bool>.SuccessResponse(true, $"Category {categoryToDelete?.Name} was deleted");
+
         }
         catch (Exception e)
         {

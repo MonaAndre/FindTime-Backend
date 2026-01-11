@@ -42,4 +42,10 @@ public class CategoryController(ICategoryService categoryService) : ControllerBa
         var result = await categoryService.UpdateCategoryAsync(dto, GetUserId());
         return StatusCode(result.StatusCode, result);
     }
+    [HttpDelete("delete-category")]
+    public async Task<IActionResult> DeleteCategory(DeleteCategoryDtoRequest dto)
+    {
+        var result = await categoryService.DeleteCategoryAsync(dto, GetUserId());
+        return StatusCode(result.StatusCode, result);
+    }
 }
