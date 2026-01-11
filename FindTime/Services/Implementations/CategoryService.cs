@@ -169,9 +169,14 @@ public class CategoryService(UserManager<ApplicationUser> userManager, Applicati
                 return errorMember!;
             }
             var (isCategory, categoryError, category) = await context.ValidateCategoryAsync<bool>(dto.CategoryId, dto.GroupId);
+
             if (!isCategory || category == null) return categoryError!;
 
             var categoryToUpdate = await context.Categories.FirstOrDefaultAsync(cu => cu.CategoryId == dto.CategoryId && cu.GroupId == dto.GroupId && cu.IsDeleted == false);
+            if(categoryToUpdate == null)
+            {
+                return ServiceResponse<bool>.NotFoundResponse("The category is not found or deleted");
+            }
             categoryToUpdate!.Name = dto.CategoryName!;
             categoryToUpdate!.Color = dto.CategoryColor!;
 
@@ -203,6 +208,7 @@ public class CategoryService(UserManager<ApplicationUser> userManager, Applicati
             if (!isCategory || category == null) return categoryError!;
 
             var categoryToDelete = await context.Categories.FirstOrDefaultAsync(cd => cd.CategoryId == dto.CategoryId && cd.GroupId == dto.GroupId);
+
             if (categoryToDelete?.IsDeleted == true) return ServiceResponse<bool>.ErrorResponse("The category is already deleted");
 
             categoryToDelete!.IsDeleted = true;

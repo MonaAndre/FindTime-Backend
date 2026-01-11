@@ -64,7 +64,7 @@ public static class ServiceExtensions
             int groupId)
     {
         var groupCategory = await context.Categories.FirstOrDefaultAsync(gc => gc.CategoryId == categoryId
-                                                                               && gc.GroupId == groupId);
+                                                                               && gc.GroupId == groupId && gc.IsDeleted == false);
         if (groupCategory == null)
         {
             return (false, ServiceResponse<T>.ForbiddenResponse("The category doesn't exist"), null);
