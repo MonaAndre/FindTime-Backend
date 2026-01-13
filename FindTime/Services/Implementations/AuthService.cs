@@ -42,9 +42,11 @@ public class AuthService(UserManager<ApplicationUser> userManager, SignInManager
 
             var response = new AuthResponseDto
             {
+                Id = newUser.Id,
                 Email = newUser.Email,
                 FirstName = newUser.FirstName,
                 LastName = newUser.LastName,
+                ProfilePictureLink = null
             };
 
             return ServiceResponse<AuthResponseDto>.SuccessResponse(response, "User created");
@@ -81,9 +83,11 @@ public class AuthService(UserManager<ApplicationUser> userManager, SignInManager
 
             var response = new AuthResponseDto
             {
+                Id= user.Id,
                 Email = user.Email!,
                 FirstName = user.FirstName,
                 LastName = user.LastName,
+                ProfilePictureLink = user.ProfilePicLink
             };
 
             return ServiceResponse<AuthResponseDto>.SuccessResponse(
