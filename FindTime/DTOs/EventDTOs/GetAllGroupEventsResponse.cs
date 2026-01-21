@@ -11,6 +11,7 @@ public class GetAllGroupEventsResponse
     public DateTime EndTime { get; set; }
     public int? CategoryId { get; set; }
     public string? CategoryColor { get; set; }
+    public string? CategoryName { get; set; }
     public string? Location { get; set; }
     public string CreatorUserId { get; set; } = string.Empty;
     public string CreatorUserName { get; set; } = string.Empty;

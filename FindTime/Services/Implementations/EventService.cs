@@ -499,6 +499,7 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                     EndTime = ev.EndTime,
                     CategoryId = ev.CategoryId,
                     CategoryColor = ev.Category!.Color,
+                    CategoryName = ev.Category!.Name,
                     Location = ev.Location,
                     CreatedAt = ev.CreatedAt,
                     CreatorUserId = ev.CreatorUserId,
