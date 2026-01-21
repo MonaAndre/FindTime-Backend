@@ -74,7 +74,7 @@ public class GroupController(IGroupService groupService) : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
-    [HttpPost("leave-group")]
+    [HttpPost("leave-group/{groupId}")]
     public async Task<IActionResult> LeaveGroup(int groupId)
     {
         var userId = GetUserId();

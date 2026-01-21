@@ -10,5 +10,6 @@ public class GetAllGroupsResponse
     public bool IsAdmin { get; set; }  
     public int MemberCount { get; set; }
     public DateTime CreatedAt { get; set; }
-    public DateTime JoinedAt { get; set; }  
+    public DateTime JoinedAt { get; set; }
+    public string GroupColor { get; set; }
 }

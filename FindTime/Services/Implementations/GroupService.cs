@@ -172,6 +172,8 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
                 .ThenInclude(g => g.Admin)
                 .Include(groupUsers => groupUsers.Group.GroupUsers)
                 .ThenInclude(groupUsers => groupUsers.User)
+                .Include(groupUserSettings => groupUserSettings.User)
+                .ThenInclude(u => u.UserGroupSettings)
                 .Where(groupUser => groupUser.UserId == user!.Id && groupUser.IsActive && !groupUser.Group.IsDeleted)
                 .Select(groupUser => new GetAllGroupsResponse
                 {
@@ -183,6 +185,8 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
                     IsAdmin = groupUser.Group.AdminId == user!.Id,
                     CreatedAt = groupUser.Group.CreatedAt,
                     JoinedAt = groupUser.JoinedAt,
+                    GroupColor = groupUser.User.UserGroupSettings
+                        .FirstOrDefault(ugs => ugs.GroupId == groupUser.GroupId)!.GroupColor,
                     MemberCount = groupUser.Group.GroupUsers.Count(m => m.IsActive)
                 })
                 .ToListAsync();
@@ -580,10 +584,9 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
     public async Task<ServiceResponse<bool>> UpdateUserGroupSettings(UpdateUserGroupSettingsDtoRequest dto,
         string userId)
     {
-        if (string.IsNullOrWhiteSpace(dto.GroupColor) ||
-            !System.Text.RegularExpressions.Regex.IsMatch(dto.GroupColor, "^#([A-Fa-f0-9]{6})$"))
+        if (string.IsNullOrWhiteSpace(dto.GroupColor))
         {
-            return ServiceResponse<bool>.ErrorResponse("Invalid color format. Use hex format like #ffffff");
+            return ServiceResponse<bool>.ErrorResponse("Invalid color format.");
         }
 
         var (isValidUser, errorResponseUser, user) = await userManager.ValidateUserAsync<bool>(userId);
@@ -623,7 +626,7 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
             {
                 UserId = userId,
                 GroupId = groupId,
-                GroupColor = "#ffffff",
+                GroupColor = "zinc",
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
