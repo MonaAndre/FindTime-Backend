@@ -11,7 +11,6 @@ namespace FindTime.Controllers;
 [Route("api/[controller]")]
 public class EventController(IEventService eventService) : ControllerBase
 {
-    private readonly IEventService _eventService = eventService;
 
     private string GetUserId()
     {

@@ -489,6 +489,7 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
             var events = await context.Events
                 .Where(e => e.GroupId == groupId && !e.IsDeleted)
                 .Include(cat => cat.Category)
+                .Include(e => e.Creator)
                 .Select(ev => new GetAllGroupEventsResponse
                 {
                     EventId = ev.EventId,
@@ -497,7 +498,17 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                     StartTime = ev.StartTime,
                     EndTime = ev.EndTime,
                     CategoryId = ev.CategoryId,
-                    CategoryColor = ev.Category!.Color
+                    CategoryColor = ev.Category!.Color,
+                    Location = ev.Location,
+                    CreatedAt = ev.CreatedAt,
+                    CreatorUserId = ev.CreatorUserId,
+                    CreatorUserEmail = ev.Creator!.Email!,
+                    CreatorUserName = ev.Creator!.FirstName,
+                    Nickname = ev.Creator.UserMemberSettingsAsTarget.Where(s => s.GroupId == groupId && s.TargetUserId == ev.CreatorUserId).Select(s => s.Nickname).FirstOrDefault(),
+                    IsRecurring = ev.IsRecurring,
+                    RecurrenceEndTime = ev.RecurrenceEndTime,
+                    RecurrencePattern = ev.RecurrencePattern,
+                    UpdatedAt = ev.UpdatedAt
                 })
                 .ToListAsync();
             return ServiceResponse<List<GetAllGroupEventsResponse>>.SuccessResponse(events);
