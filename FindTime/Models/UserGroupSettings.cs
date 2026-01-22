@@ -9,11 +9,9 @@ public class UserGroupSettings
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int UserGroupSettingsId { get; set; }
 
-    [Required]
-    public string UserId { get; set; } = string.Empty;
+    [Required] public string UserId { get; set; } = string.Empty;
 
-    [Required]
-    public int GroupId { get; set; }
+    [Required] public int GroupId { get; set; }
 
     [Required]
     [MaxLength(7)] // Hex color code
@@ -23,9 +21,7 @@ public class UserGroupSettings
     public DateTime? UpdatedAt { get; set; }
 
     // Navigation properties
-    [ForeignKey(nameof(UserId))]
-    public virtual ApplicationUser User { get; set; } = null!;
+    [ForeignKey(nameof(UserId))] public virtual ApplicationUser User { get; set; } = null!;
 
-    [ForeignKey(nameof(GroupId))]
-    public virtual Group Group { get; set; } = null!;
+    [ForeignKey(nameof(GroupId))] public virtual Group Group { get; set; } = null!;
 }

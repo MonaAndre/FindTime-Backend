@@ -48,7 +48,7 @@ public class UserService(UserManager<ApplicationUser> userManager, SignInManager
             }
 
             var existingUser = await userManager.FindByEmailAsync(dto.Email);
-            if (existingUser != null)
+            if (existingUser != null && existingUser.Id != user.Id)
             {
                 return ServiceResponse<bool>.ErrorResponse("Email already exists");
             }
@@ -80,14 +80,20 @@ public class UserService(UserManager<ApplicationUser> userManager, SignInManager
             user.Birthday = dto.Birthday;
             if (string.IsNullOrWhiteSpace(dto.ProfilePicLink))
             {
-                return ServiceResponse<bool>.ErrorResponse("Picture link can not be empty");
+                dto.ProfilePicLink = null;
             }
 
             user.ProfilePicLink = dto.ProfilePicLink;
             string phonePattern = @"^\+?\d[\d\s\-]{6,14}\d$";
-            if (!Regex.IsMatch(dto.PhoneNumber!, phonePattern))
+            if (string.IsNullOrWhiteSpace(dto.PhoneNumber))
             {
-                return ServiceResponse<bool>.ErrorResponse("Phone can not be empty and need to be valid");
+                dto.PhoneNumber = null;
+            }
+            else if (!Regex.IsMatch(dto.PhoneNumber, phonePattern))
+            {
+                return ServiceResponse<bool>.ErrorResponse(
+                    "Phone needs to be valid when provided"
+                );
             }
 
             user.PhoneNumber = dto.PhoneNumber;
