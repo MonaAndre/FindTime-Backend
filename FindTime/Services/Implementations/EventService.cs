@@ -204,6 +204,8 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                     break;
 
                 case UpdateRecurringOption.ThisAndFutureEvents:
+                    var timeOffset = dto.StartTime - eventToUpdate.StartTime;
+
                     if (eventToUpdate.RecurringGroupId.HasValue)
                     {
                         var futureEvents = await context.Events
@@ -214,7 +216,14 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
 
                         foreach (var evt in futureEvents)
                         {
-                            UpdateSingleEvent(evt, dto);
+                            if (evt.EventId == eventToUpdate.EventId)
+                            {
+                                UpdateSingleEvent(evt, dto);
+                            }
+                            else
+                            {
+                                UpdateSingleEvent(evt, dto, preserveTimeOffset: true, timeOffset: timeOffset);
+                            }
                         }
 
                         updatedCount = futureEvents.Count;
@@ -231,57 +240,15 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
 
                         foreach (var evt in futureInstances)
                         {
-                            UpdateSingleEvent(evt, dto);
+                            UpdateSingleEvent(evt, dto, preserveTimeOffset: true, timeOffset: timeOffset);
                         }
 
                         updatedCount = 1 + futureInstances.Count;
                     }
 
                     break;
-
-                case UpdateRecurringOption.AllEvents:
-                    if (eventToUpdate.RecurringGroupId.HasValue)
-                    {
-                        var masterEvent = await context.Events
-                            .FirstOrDefaultAsync(e => e.EventId == eventToUpdate.RecurringGroupId.Value);
-
-                        if (masterEvent != null)
-                        {
-                            UpdateSingleEvent(masterEvent, dto);
-                            updatedCount++;
-                        }
-
-                        var allInstances = await context.Events
-                            .Where(e => e.RecurringGroupId == eventToUpdate.RecurringGroupId
-                                        && !e.IsDeleted)
-                            .ToListAsync();
-
-                        foreach (var evt in allInstances)
-                        {
-                            UpdateSingleEvent(evt, dto);
-                        }
-
-                        updatedCount += allInstances.Count;
-                    }
-                    else
-                    {
-                        UpdateSingleEvent(eventToUpdate, dto);
-
-                        var allInstances = await context.Events
-                            .Where(e => e.RecurringGroupId == eventToUpdate.EventId
-                                        && !e.IsDeleted)
-                            .ToListAsync();
-
-                        foreach (var evt in allInstances)
-                        {
-                            UpdateSingleEvent(evt, dto);
-                        }
-
-                        updatedCount = 1 + allInstances.Count;
-                    }
-
-                    break;
             }
+
 
             await context.SaveChangesAsync();
 
@@ -505,7 +472,9 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                     CreatorUserId = ev.CreatorUserId,
                     CreatorUserEmail = ev.Creator!.Email!,
                     CreatorUserName = ev.Creator!.FirstName,
-                    Nickname = ev.Creator.UserMemberSettingsAsTarget.Where(s => s.GroupId == groupId && s.TargetUserId == ev.CreatorUserId).Select(s => s.Nickname).FirstOrDefault(),
+                    Nickname = ev.Creator.UserMemberSettingsAsTarget
+                        .Where(s => s.GroupId == groupId && s.TargetUserId == ev.CreatorUserId).Select(s => s.Nickname)
+                        .FirstOrDefault(),
                     IsRecurring = ev.IsRecurring,
                     RecurrenceEndTime = ev.RecurrenceEndTime,
                     RecurrencePattern = ev.RecurrencePattern,
@@ -521,20 +490,30 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
         }
     }
 
-    private void UpdateSingleEvent(Event eventToUpdate, UpdateEventDtoRequest dto)
+    private void UpdateSingleEvent(Event eventToUpdate, UpdateEventDtoRequest dto, bool preserveTimeOffset = false,
+        TimeSpan? timeOffset = null)
     {
-        var timeDifference = dto.StartTime - eventToUpdate.StartTime;
-
         eventToUpdate.EventName = dto.EventName;
         eventToUpdate.EventDescription = dto.EventDescription;
-        eventToUpdate.StartTime = dto.StartTime;
-        eventToUpdate.EndTime = dto.EndTime;
         eventToUpdate.CategoryId = dto.CategoryId;
         eventToUpdate.Location = dto.Location;
+
+        if (preserveTimeOffset && timeOffset.HasValue)
+        {
+            eventToUpdate.StartTime = eventToUpdate.StartTime.Add(timeOffset.Value);
+            eventToUpdate.EndTime = eventToUpdate.EndTime.Add(timeOffset.Value);
+        }
+        else
+        {
+            eventToUpdate.StartTime = dto.StartTime;
+            eventToUpdate.EndTime = dto.EndTime;
+        }
+
         eventToUpdate.UpdatedAt = DateTime.UtcNow;
     }
 
-    private async Task<int> CreateRecurringEventsAsync(RecurrencePattern? recurrencePattern, Event baseEvent)
+
+private async Task<int> CreateRecurringEventsAsync(RecurrencePattern? recurrencePattern, Event baseEvent)
     {
         try
         {
