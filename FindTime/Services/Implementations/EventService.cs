@@ -480,7 +480,9 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                     RecurrencePattern = ev.RecurrencePattern,
                     UpdatedAt = ev.UpdatedAt
                 })
+                .OrderBy(ev => ev.StartTime)
                 .ToListAsync();
+                
             return ServiceResponse<List<GetAllGroupEventsResponse>>.SuccessResponse(events);
         }
         catch (Exception e)
