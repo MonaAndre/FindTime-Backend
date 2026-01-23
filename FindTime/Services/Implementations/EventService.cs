@@ -513,7 +513,7 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
     }
 
 
-private async Task<int> CreateRecurringEventsAsync(RecurrencePattern? recurrencePattern, Event baseEvent)
+    private async Task<int> CreateRecurringEventsAsync(RecurrencePattern? recurrencePattern, Event baseEvent)
     {
         try
         {

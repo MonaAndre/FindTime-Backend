@@ -223,13 +223,22 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
             {
                 return ServiceResponse<GroupInfoDtoResponse>.NotFoundResponse("Group is deleted");
             }
+            
+            
 
 
             var userGroupSettings =
                 await context.UserGroupSettings.FirstOrDefaultAsync(us => us.UserId == userId && us.GroupId == groupId);
-
+            var categories = await context.Categories.Where(c => c.GroupId == groupId&& !c.IsDeleted)
+                .Select(gc => new GroupCategoryGroupDto
+                {
+                    CategoryId = gc.CategoryId,
+                    CategoryName = gc.Name,
+                    CategoryColor = gc.Color
+                }).ToListAsync();
+            
+            
             var members = await context.GroupUsers
-                .Include(m => m.User)
                 .Where(m => m.GroupId == groupId && m.IsActive)
                 .Select(gu => new GroupMemberGroupDto
                 {
@@ -262,7 +271,8 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
                 CreatedAt = group.CreatedAt,
                 JoinedAt = member.JoinedAt,
                 AdminName = group.Admin.FirstName,
-                MemberCount = members.Count
+                MemberCount = members.Count,
+                Categories = categories
             };
             return ServiceResponse<GroupInfoDtoResponse>.SuccessResponse(groupInfo);
         }

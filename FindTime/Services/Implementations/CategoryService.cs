@@ -34,7 +34,7 @@ public class CategoryService(UserManager<ApplicationUser> userManager, Applicati
             var existingCategoryName =
                 await context.Categories.FirstOrDefaultAsync(cat =>
                     cat.Name.Trim().ToLower() == dto.CategoryName!.Trim().ToLower() && cat.GroupId == dto.GroupId);
-            if (existingCategoryName != null)
+            if (existingCategoryName != null && !existingCategoryName.IsDeleted)
             {
                 return ServiceResponse<bool>.ErrorResponse("The category name already exists.", 409);
             }

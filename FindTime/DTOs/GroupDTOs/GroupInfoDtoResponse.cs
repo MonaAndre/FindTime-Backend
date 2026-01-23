@@ -11,10 +11,17 @@ public class GroupInfoDtoResponse
     public int MemberCount { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime JoinedAt { get; set; }
-    public string? UserGroupColor { get; set; } 
+    public string? UserGroupColor { get; set; }
+    public List<GroupCategoryGroupDto> Categories { get; set; } = new();
     public List<GroupMemberGroupDto> Members { get; set; } = new();
-   
 
+}
+
+public class GroupCategoryGroupDto
+{
+    public int CategoryId { get; set; }
+    public string? CategoryName { get; set; }
+    public string? CategoryColor { get; set; }
 }
 
 public class GroupMemberGroupDto
