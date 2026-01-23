@@ -27,6 +27,10 @@ public class CategoryService(UserManager<ApplicationUser> userManager, Applicati
                 await context.ValidateGroupMemberAsync<bool>(dto.GroupId, userId);
             if (!isValidMember || member == null)
                 return errorMember!;
+            if (string.IsNullOrWhiteSpace(dto.CategoryName) || string.IsNullOrWhiteSpace(dto.CategoryColor))
+            {
+                return ServiceResponse<bool>.ErrorResponse("Category name or color is empty");
+            }
             var existingCategoryName =
                 await context.Categories.FirstOrDefaultAsync(cat =>
                     cat.Name.Trim().ToLower() == dto.CategoryName!.Trim().ToLower() && cat.GroupId == dto.GroupId);
@@ -34,6 +38,7 @@ public class CategoryService(UserManager<ApplicationUser> userManager, Applicati
             {
                 return ServiceResponse<bool>.ErrorResponse("The category name already exists.", 409);
             }
+          
 
             var newCategory = new Category
             {
