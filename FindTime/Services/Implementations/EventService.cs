@@ -204,7 +204,8 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                     break;
 
                 case UpdateRecurringOption.ThisAndFutureEvents:
-                    var timeOffset = dto.StartTime - eventToUpdate.StartTime;
+                    var newStartTime = dto.StartTime.TimeOfDay;
+                    var newEndTime = dto.EndTime.TimeOfDay;
 
                     if (eventToUpdate.RecurringGroupId.HasValue)
                     {
@@ -222,7 +223,7 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                             }
                             else
                             {
-                                UpdateSingleEvent(evt, dto, preserveTimeOffset: true, timeOffset: timeOffset);
+                                UpdateEventWithTimeOfDay(evt, dto, newStartTime, newEndTime);
                             }
                         }
 
@@ -240,10 +241,57 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
 
                         foreach (var evt in futureInstances)
                         {
-                            UpdateSingleEvent(evt, dto, preserveTimeOffset: true, timeOffset: timeOffset);
+                            UpdateEventWithTimeOfDay(evt, dto, newStartTime, newEndTime);
                         }
 
                         updatedCount = 1 + futureInstances.Count;
+                    }
+
+                    break;
+
+                case UpdateRecurringOption.AllEvents:
+                    var allStartTime = dto.StartTime.TimeOfDay;
+                    var allEndTime = dto.EndTime.TimeOfDay;
+
+                    if (eventToUpdate.RecurringGroupId.HasValue)
+                    {
+                        var masterEventId = eventToUpdate.RecurringGroupId.Value;
+                        
+                        var masterEvent = await context.Events
+                            .FirstOrDefaultAsync(e => e.EventId == masterEventId && !e.IsDeleted);
+
+                        if (masterEvent != null)
+                        {
+                            UpdateEventWithTimeOfDay(masterEvent, dto, allStartTime, allEndTime);
+                            updatedCount++;
+                        }
+
+                        var allInstances = await context.Events
+                            .Where(e => e.RecurringGroupId == masterEventId && !e.IsDeleted)
+                            .ToListAsync();
+
+                        foreach (var evt in allInstances)
+                        {
+                            UpdateEventWithTimeOfDay(evt, dto, allStartTime, allEndTime);
+                        }
+
+                        updatedCount += allInstances.Count;
+                    }
+                    else
+                    {
+                        UpdateEventWithTimeOfDay(eventToUpdate, dto, allStartTime, allEndTime);
+                        updatedCount++;
+
+                        var allInstances = await context.Events
+                            .Where(e => e.RecurringGroupId == eventToUpdate.EventId && !e.IsDeleted)
+                            .ToListAsync();
+
+                        foreach (var evt in allInstances)
+                        {
+                            UpdateEventWithTimeOfDay(evt, dto, allStartTime, allEndTime);
+                        }
+
+                        updatedCount += allInstances.Count;
                     }
 
                     break;
@@ -490,25 +538,28 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
         }
     }
 
-    private void UpdateSingleEvent(Event eventToUpdate, UpdateEventDtoRequest dto, bool preserveTimeOffset = false,
-        TimeSpan? timeOffset = null)
+    
+    private void UpdateSingleEvent(Event eventToUpdate, UpdateEventDtoRequest dto)
     {
         eventToUpdate.EventName = dto.EventName;
         eventToUpdate.EventDescription = dto.EventDescription;
-        eventToUpdate.CategoryId = dto.CategoryId;
         eventToUpdate.Location = dto.Location;
+        eventToUpdate.StartTime = dto.StartTime;
+        eventToUpdate.EndTime = dto.EndTime;
+        eventToUpdate.UpdatedAt = DateTime.UtcNow;
+    }
 
-        if (preserveTimeOffset && timeOffset.HasValue)
-        {
-            eventToUpdate.StartTime = eventToUpdate.StartTime.Add(timeOffset.Value);
-            eventToUpdate.EndTime = eventToUpdate.EndTime.Add(timeOffset.Value);
-        }
-        else
-        {
-            eventToUpdate.StartTime = dto.StartTime;
-            eventToUpdate.EndTime = dto.EndTime;
-        }
 
+    private void UpdateEventWithTimeOfDay(Event eventToUpdate, UpdateEventDtoRequest dto, 
+        TimeSpan newStartTime, TimeSpan newEndTime)
+    {
+        eventToUpdate.EventName = dto.EventName;
+        eventToUpdate.EventDescription = dto.EventDescription;
+        eventToUpdate.Location = dto.Location;
+        
+        eventToUpdate.StartTime = eventToUpdate.StartTime.Date + newStartTime;
+        eventToUpdate.EndTime = eventToUpdate.EndTime.Date + newEndTime;
+        
         eventToUpdate.UpdatedAt = DateTime.UtcNow;
     }
 
