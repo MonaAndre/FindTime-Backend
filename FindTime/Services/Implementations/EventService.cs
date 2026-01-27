@@ -455,8 +455,6 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
 
             var events = await context.Events
                 .Where(e => e.GroupId == groupId && !e.IsDeleted)
-                .Include(cat => cat.Category)
-                .Include(e => e.Creator)
                 .Select(ev => new GetAllGroupEventsResponse
                 {
                     EventId = ev.EventId,

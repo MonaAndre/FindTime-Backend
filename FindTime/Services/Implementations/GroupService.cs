@@ -168,12 +168,6 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
                 return errorResponseUser!;
 
             var userGroups = await context.GroupUsers
-                .Include(member => member.Group)
-                .ThenInclude(g => g.Admin)
-                .Include(groupUsers => groupUsers.Group.GroupUsers)
-                .ThenInclude(groupUsers => groupUsers.User)
-                .Include(groupUserSettings => groupUserSettings.User)
-                .ThenInclude(u => u.UserGroupSettings)
                 .Where(groupUser => groupUser.UserId == user!.Id && groupUser.IsActive && !groupUser.Group.IsDeleted)
                 .Select(groupUser => new GetAllGroupsResponse
                 {
@@ -223,21 +217,21 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
             {
                 return ServiceResponse<GroupInfoDtoResponse>.NotFoundResponse("Group is deleted");
             }
-            
-            
+
+
 
 
             var userGroupSettings =
                 await context.UserGroupSettings.FirstOrDefaultAsync(us => us.UserId == userId && us.GroupId == groupId);
-            var categories = await context.Categories.Where(c => c.GroupId == groupId&& !c.IsDeleted)
+            var categories = await context.Categories.Where(c => c.GroupId == groupId && !c.IsDeleted)
                 .Select(gc => new GroupCategoryGroupDto
                 {
                     CategoryId = gc.CategoryId,
                     CategoryName = gc.Name,
                     CategoryColor = gc.Color
                 }).ToListAsync();
-            
-            
+
+
             var members = await context.GroupUsers
                 .Where(m => m.GroupId == groupId && m.IsActive)
                 .Select(gu => new GroupMemberGroupDto

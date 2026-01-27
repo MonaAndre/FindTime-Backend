@@ -38,7 +38,7 @@ public class CategoryService(UserManager<ApplicationUser> userManager, Applicati
             {
                 return ServiceResponse<bool>.ErrorResponse("The category name already exists.", 409);
             }
-          
+
 
             var newCategory = new Category
             {
@@ -178,7 +178,7 @@ public class CategoryService(UserManager<ApplicationUser> userManager, Applicati
             if (!isCategory || category == null) return categoryError!;
 
             var categoryToUpdate = await context.Categories.FirstOrDefaultAsync(cu => cu.CategoryId == dto.CategoryId && cu.GroupId == dto.GroupId && cu.IsDeleted == false);
-            if(categoryToUpdate == null)
+            if (categoryToUpdate == null)
             {
                 return ServiceResponse<bool>.NotFoundResponse("The category is not found or deleted");
             }
