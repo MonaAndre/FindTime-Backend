@@ -49,4 +49,12 @@ public class EventController(IEventService eventService) : ControllerBase
         var result = await eventService.GetAllGroupEventsAsync(groupId, userId);
         return StatusCode(result.StatusCode, result);
     }
+
+    [HttpPost("get-next-event/{groupId}")]
+    public async Task<IActionResult> GetNextEvent(int groupId)
+    {
+        var userId = GetUserId();
+        var result = await eventService.GetNextEvent(groupId, userId);
+        return StatusCode(result.StatusCode, result);
+    }
 }

@@ -214,6 +214,16 @@ public class CategoryService(UserManager<ApplicationUser> userManager, Applicati
 
             var categoryToDelete = await context.Categories.FirstOrDefaultAsync(cd => cd.CategoryId == dto.CategoryId && cd.GroupId == dto.GroupId);
 
+            var eventsWithCategoryToDelete = await context.Events
+                .Where(cat => cat.CategoryId == dto.CategoryId && cat.GroupId == dto.GroupId)
+                .ToListAsync();
+
+            foreach (var eventCat in eventsWithCategoryToDelete)
+            {
+                eventCat.CategoryId = null;
+            }
+
+
             if (categoryToDelete?.IsDeleted == true) return ServiceResponse<bool>.ErrorResponse("The category is already deleted");
 
             categoryToDelete!.IsDeleted = true;

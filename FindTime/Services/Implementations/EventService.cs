@@ -6,6 +6,7 @@ using FindTime.Models;
 using FindTime.Services.Interfaces;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 
 namespace FindTime.Services.Implementations;
 
@@ -256,7 +257,7 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                     if (eventToUpdate.RecurringGroupId.HasValue)
                     {
                         var masterEventId = eventToUpdate.RecurringGroupId.Value;
-                        
+
                         var masterEvent = await context.Events
                             .FirstOrDefaultAsync(e => e.EventId == masterEventId && !e.IsDeleted);
 
@@ -528,7 +529,7 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                 })
                 .OrderBy(ev => ev.StartTime)
                 .ToListAsync();
-                
+
             return ServiceResponse<List<GetAllGroupEventsResponse>>.SuccessResponse(events);
         }
         catch (Exception e)
@@ -537,8 +538,50 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                 $"Failed to get all group events, {e}", 500);
         }
     }
+    public async Task<ServiceResponse<NextEventDtoResponse?>> GetNextEvent(int groupId, string userId)
+    {
+        try
+        {
+            var (isValidUser, errorResponseUser, user) =
+            await userManager.ValidateUserAsync<NextEventDtoResponse>(userId);
+            if (!isValidUser)
+                return errorResponseUser!;
 
-    
+            var (isValidMember, errorMember, member) =
+                await context.ValidateGroupMemberAsync<NextEventDtoResponse>(groupId, userId);
+            if (!isValidMember || member == null)
+            {
+                return errorMember!;
+            }
+
+            var nextEvent = await context.Events
+            .Where(ne => ne.GroupId == groupId && !ne.IsDeleted && ne.StartTime > DateTime.UtcNow)
+            .OrderBy(ne => ne.StartTime)
+            .Select(ev => new NextEventDtoResponse
+            {
+                EventName = ev.EventName,
+                StartTime = ev.StartTime,
+                EndTime = ev.EndTime,
+                CategoryId = ev.CategoryId,
+                CategoryColor = ev.Category!.Color
+            })
+            .FirstOrDefaultAsync();
+            if (nextEvent == null)
+            {
+                return ServiceResponse<NextEventDtoResponse?>.SuccessResponse(null);
+            }
+
+            return ServiceResponse<NextEventDtoResponse?>.SuccessResponse(nextEvent);
+
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<NextEventDtoResponse?>.ErrorResponse(
+                $"Failed to get next event, {e}", 500);
+        }
+    }
+
+
     private void UpdateSingleEvent(Event eventToUpdate, UpdateEventDtoRequest dto)
     {
         eventToUpdate.EventName = dto.EventName;
@@ -550,16 +593,16 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
     }
 
 
-    private void UpdateEventWithTimeOfDay(Event eventToUpdate, UpdateEventDtoRequest dto, 
+    private void UpdateEventWithTimeOfDay(Event eventToUpdate, UpdateEventDtoRequest dto,
         TimeSpan newStartTime, TimeSpan newEndTime)
     {
         eventToUpdate.EventName = dto.EventName;
         eventToUpdate.EventDescription = dto.EventDescription;
         eventToUpdate.Location = dto.Location;
-        
+
         eventToUpdate.StartTime = eventToUpdate.StartTime.Date + newStartTime;
         eventToUpdate.EndTime = eventToUpdate.EndTime.Date + newEndTime;
-        
+
         eventToUpdate.UpdatedAt = DateTime.UtcNow;
     }
 
