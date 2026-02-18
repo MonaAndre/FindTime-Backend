@@ -17,5 +17,5 @@ public interface IEventService
 
     Task<ServiceResponse<List<GetAllGroupEventsResponse>>> GetAllGroupEventsAsync(int groupId,
         string userId);
-    Task<ServiceResponse<NextEventDtoResponse>> GetNextEvent(int groupId, string userId);
+    Task<ServiceResponse<NextEventDtoResponse?>> GetNextEvent(int groupId, string userId);
 }
