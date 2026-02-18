@@ -242,7 +242,7 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
                     LastName = gu.User.LastName,
                     JoinedAt = gu.JoinedAt,
                     ProfilePictureLink = gu.User.ProfilePicLink,
-                    IsAdmin = gu.UserId == user!.Id,
+                    IsAdmin = gu.Group.AdminId == gu.UserId,
                     Nickname = context.UserMemberSettings
                         .Where(ums => ums.UserId == userId
                                       && ums.TargetUserId == gu.UserId
@@ -409,6 +409,7 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
             }
 
             currentGroup.AdminId = dto.NewAdminUserId;
+            
             await context.SaveChangesAsync();
             return ServiceResponse<bool>.SuccessResponse(true, "Admin changed");
         }
