@@ -538,6 +538,55 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                 $"Failed to get all group events, {e}", 500);
         }
     }
+    public async Task<ServiceResponse<List<GetAllEventsNextWeekDtoResponse>>> GetAllEventsNextWeekAsync(string userId)
+    {
+        try
+        {
+            var (isValidUser, errorResponseUser, user) =
+                await userManager.ValidateUserAsync<List<GetAllEventsNextWeekDtoResponse>>(userId);
+            if (!isValidUser)
+                return errorResponseUser!;
+
+            var now = DateTime.UtcNow;
+            var nextWeek = now.AddDays(7);
+
+            var events = await context.Events
+                .Where(e => !e.IsDeleted
+                            && e.StartTime >= now
+                            && e.StartTime <= nextWeek
+                            && e.Group.GroupUsers.Any(gu => gu.UserId == userId && gu.IsActive))
+                .Select(e => new GetAllEventsNextWeekDtoResponse
+                {
+                    EventId = e.EventId,
+                    EventName = e.EventName,
+                    EventDescription = e.EventDescription,
+                    StartTime = e.StartTime,
+                    EndTime = e.EndTime,
+                    CategoryId = e.CategoryId,
+                    CategoryColor = e.Category!.Color,
+                    CategoryName = e.Category!.Name,
+                    Location = e.Location,
+                    CreatorUserId = e.CreatorUserId,
+                    CreatorUserName = e.Creator.FirstName,
+                    CreatorUserEmail = e.Creator.Email!,
+                    Nickname = e.Creator.UserMemberSettingsAsTarget
+                        .Where(s => s.GroupId == e.GroupId && s.TargetUserId == e.CreatorUserId)
+                        .Select(s => s.Nickname)
+                        .FirstOrDefault(),
+                    UpdatedAt = e.UpdatedAt
+                })
+                .OrderBy(e => e.StartTime)
+                .ToListAsync();
+
+            return ServiceResponse<List<GetAllEventsNextWeekDtoResponse>>.SuccessResponse(events);
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<List<GetAllEventsNextWeekDtoResponse>>.ErrorResponse(
+                $"Failed to get events for next week: {e.Message}", 500);
+        }
+    }
+
     public async Task<ServiceResponse<NextEventDtoResponse?>> GetNextEvent(int groupId, string userId)
     {
         try
@@ -580,6 +629,7 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                 $"Failed to get next event, {e}", 500);
         }
     }
+
 
 
     private void UpdateSingleEvent(Event eventToUpdate, UpdateEventDtoRequest dto)
