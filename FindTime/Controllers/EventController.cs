@@ -42,11 +42,11 @@ public class EventController(IEventService eventService) : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
-    [HttpPost("get-group-events/{groupId}")]
-    public async Task<IActionResult> GetAllGroupEvents(int groupId)
+    [HttpGet("get-group-events/{groupId}")]
+    public async Task<IActionResult> GetAllGroupEvents(int groupId, [FromQuery] DateTime rangeStart, [FromQuery] DateTime rangeEnd)
     {
         var userId = GetUserId();
-        var result = await eventService.GetAllGroupEventsAsync(groupId, userId);
+        var result = await eventService.GetAllGroupEventsAsync(groupId, userId, rangeStart, rangeEnd);
         return StatusCode(result.StatusCode, result);
     }
 
@@ -62,6 +62,31 @@ public class EventController(IEventService eventService) : ControllerBase
     {
         var userId = GetUserId();
         var result = await eventService.GetAllEventsNextWeekAsync(userId);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    [HttpGet("find-free-slot/{groupId}")]
+    public async Task<IActionResult> FindFreeSlot(int groupId, [FromQuery] int durationMinutes = 60,
+        [FromQuery] int lookAheadDays = 14)
+    {
+        var userId = GetUserId();
+        var result = await eventService.FindFreeSlotAsync(groupId, userId, durationMinutes, lookAheadDays);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    [HttpPost("respond-to-event")]
+    public async Task<IActionResult> RespondToEvent(RespondToEventDtoRequest dto)
+    {
+        var userId = GetUserId();
+        var result = await eventService.RespondToEventAsync(dto, userId);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    [HttpGet("get-event-participants/{eventId}")]
+    public async Task<IActionResult> GetEventParticipants(int eventId)
+    {
+        var userId = GetUserId();
+        var result = await eventService.GetEventParticipantsAsync(eventId, userId);
         return StatusCode(result.StatusCode, result);
     }
 }

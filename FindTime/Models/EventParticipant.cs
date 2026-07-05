@@ -3,6 +3,14 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace FindTime.Models;
 
+public enum RsvpStatus
+{
+    Pending,
+    Accepted,
+    Declined,
+    Maybe
+}
+
 public class EventParticipant
 {
     [Key]
@@ -16,6 +24,11 @@ public class EventParticipant
     public string UserId { get; set; } = string.Empty;
 
     public DateTime InvitedAt { get; set; } = DateTime.UtcNow;
+
+    [Required]
+    public RsvpStatus Status { get; set; } = RsvpStatus.Pending;
+
+    public DateTime? RespondedAt { get; set; }
 
     // Navigation properties
     [ForeignKey(nameof(EventId))]

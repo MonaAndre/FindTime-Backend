@@ -18,5 +18,7 @@ namespace FindTime.DTOs.EventDTOs
         public string CreatorUserEmail { get; set; } = string.Empty;
         public string? Nickname { get; set; }
         public DateTime? UpdatedAt { get; set; }
+        public string? GroupName { get; set; }
+        public RsvpStatus? MyRsvpStatus { get; set; }
     }
 }

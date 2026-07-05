@@ -23,4 +23,5 @@ public class GetAllGroupEventsResponse
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
+    public RsvpStatus? MyRsvpStatus { get; set; }
 }

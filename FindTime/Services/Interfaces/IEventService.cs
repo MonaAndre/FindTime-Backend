@@ -16,7 +16,21 @@ public interface IEventService
         string userId);
 
     Task<ServiceResponse<List<GetAllGroupEventsResponse>>> GetAllGroupEventsAsync(int groupId,
-        string userId);
+        string userId, DateTime rangeStart, DateTime randgeEnd);
     Task<ServiceResponse<NextEventDtoResponse?>> GetNextEvent(int groupId, string userId);
     Task<ServiceResponse<List<GetAllEventsNextWeekDtoResponse>>> GetAllEventsNextWeekAsync(string userId);
+
+    Task<ServiceResponse<FindFreeSlotDtoResponse?>> FindFreeSlotAsync(
+        int groupId,
+        string userId,
+        int durationMinutes,
+        int lookAheadDays);
+
+    Task<ServiceResponse<RespondToEventDtoResponse>> RespondToEventAsync(
+        RespondToEventDtoRequest dto,
+        string userId);
+
+    Task<ServiceResponse<List<EventParticipantDtoResponse>>> GetEventParticipantsAsync(
+        int eventId,
+        string userId);
 }

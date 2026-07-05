@@ -93,12 +93,23 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
 
             await context.Events.AddAsync(newEvent);
             await context.SaveChangesAsync();
+
+            var memberIds = await context.GroupUsers
+                .Where(gu => gu.GroupId == dto.GroupId && gu.IsActive)
+                .Select(gu => gu.UserId)
+                .ToListAsync();
+
+            context.EventParticipants.AddRange(BuildEventParticipants(newEvent.EventId, memberIds, userId));
+            await context.SaveChangesAsync();
+
             int recurringInstancesCreated = 0;
             if (dto.IsRecurring && dto.RecurrencePattern.HasValue)
             {
                 recurringInstancesCreated = await CreateRecurringEventsAsync(
                     dto.RecurrencePattern.Value,
-                    newEvent);
+                    newEvent,
+                    memberIds,
+                    userId);
 
                 if (recurringInstancesCreated == 0)
                 {
@@ -486,7 +497,7 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
     }
 
     public async Task<ServiceResponse<List<GetAllGroupEventsResponse>>> GetAllGroupEventsAsync(int groupId,
-        string userId)
+        string userId, DateTime rangeStart, DateTime rangeEnd)
     {
         try
         {
@@ -503,7 +514,7 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
             }
 
             var events = await context.Events
-                .Where(e => e.GroupId == groupId && !e.IsDeleted)
+                .Where(e => e.GroupId == groupId && !e.IsDeleted && e.StartTime < rangeEnd && e.EndTime > rangeStart)
                 .Select(ev => new GetAllGroupEventsResponse
                 {
                     EventId = ev.EventId,
@@ -525,7 +536,11 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                     IsRecurring = ev.IsRecurring,
                     RecurrenceEndTime = ev.RecurrenceEndTime,
                     RecurrencePattern = ev.RecurrencePattern,
-                    UpdatedAt = ev.UpdatedAt
+                    UpdatedAt = ev.UpdatedAt,
+                    MyRsvpStatus = ev.EventParticipants
+                        .Where(ep => ep.UserId == userId)
+                        .Select(ep => (RsvpStatus?)ep.Status)
+                        .FirstOrDefault()
                 })
                 .OrderBy(ev => ev.StartTime)
                 .ToListAsync();
@@ -573,7 +588,12 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                         .Where(s => s.GroupId == e.GroupId && s.TargetUserId == e.CreatorUserId)
                         .Select(s => s.Nickname)
                         .FirstOrDefault(),
-                    UpdatedAt = e.UpdatedAt
+                    UpdatedAt = e.UpdatedAt,
+                    GroupName = e.Group.GroupName,
+                    MyRsvpStatus = e.EventParticipants
+                        .Where(ep => ep.UserId == userId)
+                        .Select(ep => (RsvpStatus?)ep.Status)
+                        .FirstOrDefault()
                 })
                 .OrderBy(e => e.StartTime)
                 .ToListAsync();
@@ -632,6 +652,270 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
 
 
 
+    public async Task<ServiceResponse<FindFreeSlotDtoResponse?>> FindFreeSlotAsync(
+        int groupId,
+        string userId,
+        int durationMinutes,
+        int lookAheadDays)
+    {
+        try
+        {
+            var (isValidUser, errorResponseUser, user) =
+                await userManager.ValidateUserAsync<FindFreeSlotDtoResponse>(userId);
+            if (!isValidUser)
+                return errorResponseUser!;
+
+            var (isValidMember, errorMember, member) =
+                await context.ValidateGroupMemberAsync<FindFreeSlotDtoResponse>(groupId, userId);
+            if (!isValidMember || member == null)
+            {
+                return errorMember!;
+            }
+
+            if (durationMinutes <= 0)
+            {
+                return ServiceResponse<FindFreeSlotDtoResponse?>.ErrorResponse(
+                    "Duration must be greater than 0 minutes");
+            }
+
+            if (lookAheadDays <= 0 || lookAheadDays > 365)
+            {
+                return ServiceResponse<FindFreeSlotDtoResponse?>.ErrorResponse(
+                    "Look-ahead days must be between 1 and 365");
+            }
+
+            var rangeStart = DateTime.UtcNow;
+            var rangeEnd = rangeStart.AddDays(lookAheadDays);
+            var duration = TimeSpan.FromMinutes(durationMinutes);
+
+            if (rangeEnd - rangeStart < duration)
+            {
+                return ServiceResponse<FindFreeSlotDtoResponse?>.ErrorResponse(
+                    "Look-ahead window is shorter than the requested duration");
+            }
+
+            var memberIds = await context.GroupUsers
+                .Where(gu => gu.GroupId == groupId && gu.IsActive)
+                .Select(gu => gu.UserId)
+                .ToListAsync();
+
+            if (memberIds.Count == 0)
+            {
+                return ServiceResponse<FindFreeSlotDtoResponse?>.ErrorResponse("Group has no active members");
+            }
+
+            // Every event in any group a member belongs to blocks that member's time,
+            // not just events in the target group — unless that member has declined it.
+            // A missing participant row (events created before RSVP existed) is treated as busy.
+            var busyIntervals = await context.Events
+                .Where(e => !e.IsDeleted
+                            && e.StartTime < rangeEnd
+                            && e.EndTime > rangeStart
+                            && e.Group.GroupUsers.Any(gu =>
+                                memberIds.Contains(gu.UserId)
+                                && gu.IsActive
+                                && !e.EventParticipants.Any(ep =>
+                                    ep.UserId == gu.UserId && ep.Status == RsvpStatus.Declined)))
+                .OrderBy(e => e.StartTime)
+                .Select(e => new { e.StartTime, e.EndTime })
+                .ToListAsync();
+
+            var mergedBusyBlocks = new List<(DateTime Start, DateTime End)>();
+            foreach (var busy in busyIntervals)
+            {
+                var start = busy.StartTime < rangeStart ? rangeStart : busy.StartTime;
+                var end = busy.EndTime;
+                if (end <= start)
+                {
+                    continue;
+                }
+
+                if (mergedBusyBlocks.Count > 0 && start <= mergedBusyBlocks[^1].End)
+                {
+                    if (end > mergedBusyBlocks[^1].End)
+                    {
+                        mergedBusyBlocks[^1] = (mergedBusyBlocks[^1].Start, end);
+                    }
+                }
+                else
+                {
+                    mergedBusyBlocks.Add((start, end));
+                }
+            }
+
+            var roundingInterval = TimeSpan.FromMinutes(5);
+            var candidateStart = RoundUpTo(rangeStart, roundingInterval);
+            foreach (var block in mergedBusyBlocks)
+            {
+                if (candidateStart + duration <= block.Start)
+                {
+                    break;
+                }
+
+                if (block.End > candidateStart)
+                {
+                    candidateStart = RoundUpTo(block.End, roundingInterval);
+                }
+            }
+
+            if (candidateStart + duration > rangeEnd)
+            {
+                return ServiceResponse<FindFreeSlotDtoResponse?>.SuccessResponse(
+                    null,
+                    $"No free slot of {durationMinutes} minutes found within the next {lookAheadDays} day(s)");
+            }
+
+            var freeSlot = new FindFreeSlotDtoResponse
+            {
+                StartTime = candidateStart,
+                EndTime = candidateStart + duration,
+                DurationMinutes = durationMinutes
+            };
+
+            return ServiceResponse<FindFreeSlotDtoResponse?>.SuccessResponse(freeSlot);
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<FindFreeSlotDtoResponse?>.ErrorResponse(
+                $"Failed to find free slot: {e.Message}", 500);
+        }
+    }
+
+    public async Task<ServiceResponse<RespondToEventDtoResponse>> RespondToEventAsync(
+        RespondToEventDtoRequest dto,
+        string userId)
+    {
+        try
+        {
+            var (isValidUser, errorResponseUser, user) =
+                await userManager.ValidateUserAsync<RespondToEventDtoResponse>(userId);
+            if (!isValidUser)
+                return errorResponseUser!;
+
+            if (!Enum.IsDefined(typeof(RsvpStatus), dto.Status))
+            {
+                return ServiceResponse<RespondToEventDtoResponse>.ErrorResponse(
+                    "Invalid RSVP status. Valid values are: Pending, Accepted, Declined");
+            }
+
+            var participant = await context.EventParticipants
+                .Include(ep => ep.Event)
+                .FirstOrDefaultAsync(ep => ep.EventId == dto.EventId && ep.UserId == userId);
+
+            if (participant == null || participant.Event.IsDeleted)
+            {
+                return ServiceResponse<RespondToEventDtoResponse>.NotFoundResponse(
+                    "You have not been invited to this event");
+            }
+
+            participant.Status = dto.Status;
+            participant.RespondedAt = dto.Status == RsvpStatus.Pending ? null : DateTime.UtcNow;
+
+            await context.SaveChangesAsync();
+
+            var response = new RespondToEventDtoResponse
+            {
+                EventId = participant.EventId,
+                Status = participant.Status,
+                RespondedAt = participant.RespondedAt
+            };
+
+            return ServiceResponse<RespondToEventDtoResponse>.SuccessResponse(
+                response,
+                $"RSVP updated to {dto.Status}");
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<RespondToEventDtoResponse>.ErrorResponse(
+                $"Failed to respond to event: {e.Message}", 500);
+        }
+    }
+
+    public async Task<ServiceResponse<List<EventParticipantDtoResponse>>> GetEventParticipantsAsync(
+        int eventId,
+        string userId)
+    {
+        try
+        {
+            var (isValidUser, errorResponseUser, user) =
+                await userManager.ValidateUserAsync<List<EventParticipantDtoResponse>>(userId);
+            if (!isValidUser)
+                return errorResponseUser!;
+
+            var eventEntity = await context.Events
+                .FirstOrDefaultAsync(e => e.EventId == eventId && !e.IsDeleted);
+
+            if (eventEntity == null)
+            {
+                return ServiceResponse<List<EventParticipantDtoResponse>>.NotFoundResponse("Event not found");
+            }
+
+            var (isValidMember, errorMember, member) =
+                await context.ValidateGroupMemberAsync<List<EventParticipantDtoResponse>>(
+                    eventEntity.GroupId, userId);
+            if (!isValidMember || member == null)
+            {
+                return errorMember!;
+            }
+
+            var groupId = eventEntity.GroupId;
+            var participants = await context.EventParticipants
+                .Where(ep => ep.EventId == eventId)
+                .Select(ep => new EventParticipantDtoResponse
+                {
+                    UserId = ep.UserId,
+                    Email = ep.User.Email!,
+                    FirstName = ep.User.FirstName,
+                    LastName = ep.User.LastName,
+                    Nickname = ep.User.UserMemberSettingsAsTarget
+                        .Where(s => s.GroupId == groupId && s.TargetUserId == ep.UserId)
+                        .Select(s => s.Nickname)
+                        .FirstOrDefault(),
+                    Status = ep.Status,
+                    InvitedAt = ep.InvitedAt,
+                    RespondedAt = ep.RespondedAt
+                })
+                .OrderBy(ep => ep.FirstName)
+                .ToListAsync();
+
+            return ServiceResponse<List<EventParticipantDtoResponse>>.SuccessResponse(participants);
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<List<EventParticipantDtoResponse>>.ErrorResponse(
+                $"Failed to get event participants: {e.Message}", 500);
+        }
+    }
+
+    private static List<EventParticipant> BuildEventParticipants(int eventId, List<string> memberIds,
+        string creatorUserId)
+    {
+        var now = DateTime.UtcNow;
+        return memberIds.Select(id => id == creatorUserId
+            ? new EventParticipant
+            {
+                EventId = eventId,
+                UserId = id,
+                InvitedAt = now,
+                Status = RsvpStatus.Accepted,
+                RespondedAt = now
+            }
+            : new EventParticipant
+            {
+                EventId = eventId,
+                UserId = id,
+                InvitedAt = now,
+                Status = RsvpStatus.Pending,
+                RespondedAt = null
+            }).ToList();
+    }
+
+    private static DateTime RoundUpTo(DateTime time, TimeSpan interval)
+    {
+        var overflow = time.Ticks % interval.Ticks;
+        return overflow == 0 ? time : time.AddTicks(interval.Ticks - overflow);
+    }
+
     private void UpdateSingleEvent(Event eventToUpdate, UpdateEventDtoRequest dto)
     {
         eventToUpdate.EventName = dto.EventName;
@@ -657,7 +941,8 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
     }
 
 
-    private async Task<int> CreateRecurringEventsAsync(RecurrencePattern? recurrencePattern, Event baseEvent)
+    private async Task<int> CreateRecurringEventsAsync(RecurrencePattern? recurrencePattern, Event baseEvent,
+        List<string> memberIds, string creatorUserId)
     {
         try
         {
@@ -699,6 +984,11 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
             if (eventsToAdd.Any())
             {
                 await context.Events.AddRangeAsync(eventsToAdd);
+                await context.SaveChangesAsync();
+
+                var participants = eventsToAdd
+                    .SelectMany(evt => BuildEventParticipants(evt.EventId, memberIds, creatorUserId));
+                context.EventParticipants.AddRange(participants);
                 await context.SaveChangesAsync();
             }
 
