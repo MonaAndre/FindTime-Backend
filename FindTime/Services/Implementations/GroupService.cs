@@ -9,7 +9,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FindTime.Services.Implementations;
 
-public class GroupService(ApplicationDbContext context, UserManager<ApplicationUser> userManager)
+public class GroupService(
+    ApplicationDbContext context,
+    UserManager<ApplicationUser> userManager,
+    IActivityService activityService)
     : IGroupService
 {
     public async Task<ServiceResponse<CreateGroupDtoResponse>> CreateGroupAsync(CreateGroupDtoRequest dto,
@@ -100,6 +103,14 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
                     {
                         return ServiceResponse<CreateGroupDtoResponse>.ErrorResponse("Group creation failed.");
                     }
+
+                    await activityService.LogActivityAsync(
+                        ActivityType.MemberJoined,
+                        newMember.Id,
+                        newGroup.GroupId,
+                        newGroup.GroupName,
+                        null,
+                        null);
                 }
             }
 
@@ -316,6 +327,15 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
                 exMember.IsActive = true;
                 exMember.JoinedAt = DateTime.UtcNow;
                 await context.SaveChangesAsync();
+
+                await activityService.LogActivityAsync(
+                    ActivityType.MemberJoined,
+                    newMember.Id,
+                    dto.GroupId,
+                    group.GroupName,
+                    null,
+                    null);
+
                 return ServiceResponse<bool>.SuccessResponse(true, "Member re-added to the group");
             }
 
@@ -329,9 +349,20 @@ public class GroupService(ApplicationDbContext context, UserManager<ApplicationU
             await context.GroupUsers.AddAsync(newUserGroup);
             await context.SaveChangesAsync();
             var isCreated = await CreateDefUserGroupSet(newMember.Id, dto.GroupId);
-            return !isCreated
-                ? ServiceResponse<bool>.ErrorResponse("Failed to add user settings")
-                : ServiceResponse<bool>.SuccessResponse(true, "Member added to the group");
+            if (!isCreated)
+            {
+                return ServiceResponse<bool>.ErrorResponse("Failed to add user settings");
+            }
+
+            await activityService.LogActivityAsync(
+                ActivityType.MemberJoined,
+                newMember.Id,
+                dto.GroupId,
+                group.GroupName,
+                null,
+                null);
+
+            return ServiceResponse<bool>.SuccessResponse(true, "Member added to the group");
         }
         catch (Exception)
         {

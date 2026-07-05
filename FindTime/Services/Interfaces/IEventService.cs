@@ -33,4 +33,9 @@ public interface IEventService
     Task<ServiceResponse<List<EventParticipantDtoResponse>>> GetEventParticipantsAsync(
         int eventId,
         string userId);
+
+    Task<ServiceResponse<GetEventDtoResponse>> GetEventAsync(
+        int groupId,
+        int eventId,
+        string userId);
 }

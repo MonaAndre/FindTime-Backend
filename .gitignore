@@ -7,3 +7,4 @@ riderModule.iml
 /.vs
 /FindTime/Migrations
 /FindTime/Properties/launchSettings.json
+/.claude/skills/run-findtime-backend

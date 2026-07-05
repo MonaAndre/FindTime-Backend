@@ -16,6 +16,8 @@ namespace FindTime.Configurations
             services.AddScoped<IGroupService, GroupService>();
             services.AddScoped<IEventService, EventService>();
             services.AddScoped<ICategoryService, CategoryService>();
+            services.AddScoped<INotificationService, NotificationService>();
+            services.AddScoped<IActivityService, ActivityService>();
 
             return services;
 

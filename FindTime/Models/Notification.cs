@@ -9,7 +9,9 @@ public enum NotificationType
     EventUpdated,
     NoteAdded,
     Reminder,
-    EventInvitation
+    EventInvitation,
+    EventDeleted,
+    RsvpResponse
 }
 
 public class Notification
@@ -22,6 +24,8 @@ public class Notification
     public string UserId { get; set; } = string.Empty;
 
     public int? EventId { get; set; }
+
+    public int? GroupId { get; set; }
 
     [Required]
     public NotificationType Type { get; set; }
@@ -40,4 +44,7 @@ public class Notification
 
     [ForeignKey(nameof(EventId))]
     public virtual Event? Event { get; set; }
+
+    [ForeignKey(nameof(GroupId))]
+    public virtual Group? Group { get; set; }
 }

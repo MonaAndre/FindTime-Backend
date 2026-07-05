@@ -55,4 +55,5 @@ public class Event
     public virtual ICollection<EventNote> EventNotes { get; set; } = new List<EventNote>();
     public virtual ICollection<EventReminder> EventReminders { get; set; } = new List<EventReminder>();
     public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
+    public virtual ICollection<Activity> Activities { get; set; } = new List<Activity>();
 }

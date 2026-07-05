@@ -10,7 +10,11 @@ using System.Linq.Expressions;
 
 namespace FindTime.Services.Implementations;
 
-public class EventService(ApplicationDbContext context, UserManager<ApplicationUser> userManager) : IEventService
+public class EventService(
+    ApplicationDbContext context,
+    UserManager<ApplicationUser> userManager,
+    INotificationService notificationService,
+    IActivityService activityService) : IEventService
 {
     public async Task<ServiceResponse<CreateEventDtoResponse>> CreateEventAsync(CreateEventDtoRequest dto,
         string userId)
@@ -118,6 +122,29 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
                 }
             }
 
+            var creatorName = await userManager.Users
+                .Where(u => u.Id == userId)
+                .Select(u => u.FirstName)
+                .FirstOrDefaultAsync() ?? "Someone";
+            var groupName = await context.Groups
+                .Where(g => g.GroupId == dto.GroupId)
+                .Select(g => g.GroupName)
+                .FirstOrDefaultAsync() ?? "your group";
+
+            await notificationService.NotifyManyAsync(
+                memberIds.Where(id => id != userId),
+                NotificationType.EventCreated,
+                $"{creatorName} created \"{newEvent.EventName}\" in {groupName}",
+                newEvent.EventId,
+                newEvent.GroupId);
+
+            await activityService.LogActivityAsync(
+                ActivityType.EventCreated,
+                userId,
+                newEvent.GroupId,
+                groupName,
+                newEvent.EventId,
+                newEvent.EventName);
 
             var createdEvent = new CreateEventDtoResponse
             {
@@ -312,6 +339,34 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
 
             await context.SaveChangesAsync();
 
+            var participantIds = await context.EventParticipants
+                .Where(ep => ep.EventId == eventToUpdate.EventId)
+                .Select(ep => ep.UserId)
+                .ToListAsync();
+            var updaterName = await userManager.Users
+                .Where(u => u.Id == userId)
+                .Select(u => u.FirstName)
+                .FirstOrDefaultAsync() ?? "Someone";
+            var updateGroupName = await context.Groups
+                .Where(g => g.GroupId == eventToUpdate.GroupId)
+                .Select(g => g.GroupName)
+                .FirstOrDefaultAsync() ?? "your group";
+
+            await notificationService.NotifyManyAsync(
+                participantIds.Where(id => id != userId),
+                NotificationType.EventUpdated,
+                $"{updaterName} updated \"{eventToUpdate.EventName}\"",
+                eventToUpdate.EventId,
+                eventToUpdate.GroupId);
+
+            await activityService.LogActivityAsync(
+                ActivityType.EventUpdated,
+                userId,
+                eventToUpdate.GroupId,
+                updateGroupName,
+                eventToUpdate.EventId,
+                eventToUpdate.EventName);
+
             var response = new UpdateEventDtoResponse
             {
                 UpdatedCount = updatedCount,
@@ -469,6 +524,30 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
             }
 
             await context.SaveChangesAsync();
+
+            var participantIds = await context.EventParticipants
+                .Where(ep => ep.EventId == eventToDelete.EventId)
+                .Select(ep => ep.UserId)
+                .ToListAsync();
+            var deleterName = await userManager.Users
+                .Where(u => u.Id == userId)
+                .Select(u => u.FirstName)
+                .FirstOrDefaultAsync() ?? "Someone";
+
+            await notificationService.NotifyManyAsync(
+                participantIds.Where(id => id != userId),
+                NotificationType.EventDeleted,
+                $"{deleterName} deleted \"{eventToDelete.EventName}\"",
+                null,
+                eventToDelete.GroupId);
+
+            await activityService.LogActivityAsync(
+                ActivityType.EventDeleted,
+                userId,
+                eventToDelete.GroupId,
+                eventToDelete.Group.GroupName,
+                eventToDelete.EventId,
+                eventToDelete.EventName);
 
             var response = new DeleteEventDtoResponse
             {
@@ -813,6 +892,40 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
 
             await context.SaveChangesAsync();
 
+            if (dto.Status != RsvpStatus.Pending && participant.Event.CreatorUserId != userId)
+            {
+                var responseVerb = dto.Status switch
+                {
+                    RsvpStatus.Accepted => "accepted",
+                    RsvpStatus.Declined => "declined",
+                    RsvpStatus.Maybe => "responded maybe to",
+                    _ => "responded to"
+                };
+
+                await notificationService.NotifyAsync(
+                    participant.Event.CreatorUserId,
+                    NotificationType.RsvpResponse,
+                    $"{user!.FirstName} {responseVerb} your event \"{participant.Event.EventName}\"",
+                    participant.EventId,
+                    participant.Event.GroupId);
+            }
+
+            if (dto.Status != RsvpStatus.Pending)
+            {
+                var rsvpGroupName = await context.Groups
+                    .Where(g => g.GroupId == participant.Event.GroupId)
+                    .Select(g => g.GroupName)
+                    .FirstOrDefaultAsync() ?? "your group";
+
+                await activityService.LogActivityAsync(
+                    ActivityType.RsvpResponse,
+                    userId,
+                    participant.Event.GroupId,
+                    rsvpGroupName,
+                    participant.EventId,
+                    participant.Event.EventName);
+            }
+
             var response = new RespondToEventDtoResponse
             {
                 EventId = participant.EventId,
@@ -884,6 +997,86 @@ public class EventService(ApplicationDbContext context, UserManager<ApplicationU
         {
             return ServiceResponse<List<EventParticipantDtoResponse>>.ErrorResponse(
                 $"Failed to get event participants: {e.Message}", 500);
+        }
+    }
+
+    public async Task<ServiceResponse<GetEventDtoResponse>> GetEventAsync(
+        int groupId,
+        int eventId,
+        string userId)
+    {
+        try
+        {
+            var (isValidUser, errorResponseUser, user) =
+                await userManager.ValidateUserAsync<GetEventDtoResponse>(userId);
+            if (!isValidUser)
+                return errorResponseUser!;
+
+            var (isValidMember, errorMember, member) =
+                await context.ValidateGroupMemberAsync<GetEventDtoResponse>(groupId, userId);
+            if (!isValidMember || member == null)
+            {
+                return errorMember!;
+            }
+
+            var eventDto = await context.Events
+                .Where(ev => ev.EventId == eventId && ev.GroupId == groupId && !ev.IsDeleted)
+                .Select(ev => new GetEventDtoResponse
+                {
+                    EventId = ev.EventId,
+                    EventName = ev.EventName,
+                    EventDescription = ev.EventDescription,
+                    GroupId = ev.GroupId,
+                    StartTime = ev.StartTime,
+                    EndTime = ev.EndTime,
+                    CategoryId = ev.CategoryId,
+                    CategoryColor = ev.Category!.Color,
+                    CategoryName = ev.Category!.Name,
+                    Location = ev.Location,
+                    CreatorUserId = ev.CreatorUserId,
+                    CreatorUserEmail = ev.Creator!.Email!,
+                    CreatorUserName = ev.Creator!.FirstName,
+                    Nickname = ev.Creator.UserMemberSettingsAsTarget
+                        .Where(s => s.GroupId == groupId && s.TargetUserId == ev.CreatorUserId)
+                        .Select(s => s.Nickname)
+                        .FirstOrDefault(),
+                    IsRecurring = ev.IsRecurring,
+                    RecurrencePattern = ev.RecurrencePattern,
+                    RecurrenceEndTime = ev.RecurrenceEndTime,
+                    CreatedAt = ev.CreatedAt,
+                    UpdatedAt = ev.UpdatedAt,
+                    MyRsvpStatus = ev.EventParticipants
+                        .Where(ep => ep.UserId == userId)
+                        .Select(ep => (RsvpStatus?)ep.Status)
+                        .FirstOrDefault(),
+                    Participants = ev.EventParticipants.Select(ep => new EventParticipantDtoResponse
+                    {
+                        UserId = ep.UserId,
+                        Email = ep.User.Email!,
+                        FirstName = ep.User.FirstName,
+                        LastName = ep.User.LastName,
+                        Nickname = ep.User.UserMemberSettingsAsTarget
+                            .Where(s => s.GroupId == groupId && s.TargetUserId == ep.UserId)
+                            .Select(s => s.Nickname)
+                            .FirstOrDefault(),
+                        Status = ep.Status,
+                        InvitedAt = ep.InvitedAt,
+                        RespondedAt = ep.RespondedAt
+                    }).ToList()
+                })
+                .FirstOrDefaultAsync();
+
+            if (eventDto == null)
+            {
+                return ServiceResponse<GetEventDtoResponse>.NotFoundResponse("Event not found");
+            }
+
+            return ServiceResponse<GetEventDtoResponse>.SuccessResponse(eventDto);
+        }
+        catch (Exception e)
+        {
+            return ServiceResponse<GetEventDtoResponse>.ErrorResponse(
+                $"Failed to get event: {e.Message}", 500);
         }
     }
 

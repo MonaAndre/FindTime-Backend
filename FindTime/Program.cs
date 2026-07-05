@@ -1,5 +1,7 @@
 using FindTime.Configurations;
 using FindTime.Data;
+using FindTime.Hubs;
+using FindTime.Json;
 using FindTime.Models;
 using FindTime.Services.Implementations;
 using FindTime.Services.Interfaces;
@@ -12,7 +14,16 @@ using Scalar.AspNetCore;
 var builder = WebApplication.CreateBuilder(args);
 
 
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.Converters.Add(new UtcDateTimeConverter());
+    options.JsonSerializerOptions.Converters.Add(new UtcNullableDateTimeConverter());
+});
+builder.Services.AddSignalR().AddJsonProtocol(options =>
+{
+    options.PayloadSerializerOptions.Converters.Add(new UtcDateTimeConverter());
+    options.PayloadSerializerOptions.Converters.Add(new UtcNullableDateTimeConverter());
+});
 builder.Services.AddIdentityConfig();
 builder.Services.AddConnectionString(builder.Configuration);
 builder.Services.AddApplicationServices(builder.Configuration);
@@ -42,4 +53,5 @@ app.UseCors("AllowVueApp");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<NotificationHub>("/hubs/notifications");
 app.Run();

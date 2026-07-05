@@ -25,4 +25,5 @@ public class ApplicationUser : IdentityUser
     public virtual ICollection<UserMemberSettings> UserMemberSettingsAsUser { get; set; } = new List<UserMemberSettings>();
     public virtual ICollection<UserMemberSettings> UserMemberSettingsAsTarget { get; set; } = new List<UserMemberSettings>();
     public virtual ICollection<Category> Categories { get; set; } = new List<Category>();
+    public virtual ICollection<Activity> Activities { get; set; } = new List<Activity>();
 }

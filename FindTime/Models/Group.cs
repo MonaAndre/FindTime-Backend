@@ -31,4 +31,6 @@ public class Group
     public virtual ICollection<UserGroupSettings> UserGroupSettings { get; set; } = new List<UserGroupSettings>();
     public virtual ICollection<UserMemberSettings> UserMemberSettings { get; set; } = new List<UserMemberSettings>();
     public virtual ICollection<Category> Categories { get; set; } = new List<Category>();
+    public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
+    public virtual ICollection<Activity> Activities { get; set; } = new List<Activity>();
 }

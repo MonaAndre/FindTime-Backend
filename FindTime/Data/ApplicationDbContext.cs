@@ -18,6 +18,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Notification> Notifications { get; set; }
     public DbSet<UserGroupSettings> UserGroupSettings { get; set; }
     public DbSet<UserMemberSettings> UserMemberSettings { get; set; }
+    public DbSet<Activity> Activities { get; set; }
 
     
 
@@ -176,7 +177,36 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(n => n.EventId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            entity.HasOne(n => n.Group)
+                .WithMany(g => g.Notifications)
+                .HasForeignKey(n => n.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             entity.HasIndex(e => new { e.UserId, e.IsRead, e.CreatedAt });
+        });
+
+        // Configure Activity
+        modelBuilder.Entity<Activity>(entity =>
+        {
+            entity.HasKey(a => a.ActivityId);
+            entity.Property(a => a.ActivityId).UseIdentityColumn();
+
+            entity.HasOne(a => a.ActorUser)
+                .WithMany(u => u.Activities)
+                .HasForeignKey(a => a.ActorUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.Group)
+                .WithMany(g => g.Activities)
+                .HasForeignKey(a => a.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.Event)
+                .WithMany(e => e.Activities)
+                .HasForeignKey(a => a.EventId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(a => new { a.GroupId, a.CreatedAt });
         });
 
         // Configure UserGroupSettings
